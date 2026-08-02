@@ -6,11 +6,11 @@ import io.github.jd1378.otphelper.BuildConfig
 import java.security.SecureRandom
 
 /**
- * Verifies actual cross-package notification-body delivery.
+ * Verifies actual cross-package notification-body delivery in instrumentation tests.
  *
- * The probe notification must be posted by shell/Shizuku with `cmd notification post`; an
- * OTP Helper self-notification is intentionally rejected because same-package delivery may bypass
- * sensitive-notification redaction and would not prove that real third-party OTPs are readable.
+ * The probe is posted by Android shell with `cmd notification post`; an OTP Helper
+ * self-notification is rejected because same-package delivery would not prove that real third-party
+ * OTPs are readable. No production UI or elevated integration invokes this helper.
  */
 object NotificationIngestionSelfTest {
   private const val PREFS = "notification_ingestion_self_test"
@@ -47,6 +47,11 @@ object NotificationIngestionSelfTest {
     return Probe(token = token, tag = tag)
   }
 
+  fun buildShellPostCommand(probe: Probe): String =
+      "cmd notification post -t ${shellQuote("OTP Helper external read test")} " +
+          "${shellQuote(probe.tag)} " +
+          shellQuote("One-time verification code: ${probe.token}")
+
   fun handlePostedNotification(
       context: Context,
       packageName: String,
@@ -58,7 +63,6 @@ object NotificationIngestionSelfTest {
     val expectedTag = prefs.getString(KEY_TAG, null) ?: return false
     if (notificationTag != expectedTag) return false
 
-    // Reject a same-package probe: it cannot prove third-party sensitive notification access.
     if (packageName == BuildConfig.APPLICATION_ID) {
       prefs.edit().putString(KEY_STATE, State.FAILED.name).apply()
       AppLogger.w(TAG, "rejected same-package notification-body probe")
@@ -97,6 +101,8 @@ object NotificationIngestionSelfTest {
     preferences(context).edit().putString(KEY_STATE, State.TIMED_OUT.name).apply()
     return State.TIMED_OUT
   }
+
+  private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
   private fun preferences(context: Context) =
       context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
