@@ -36,6 +36,9 @@
   <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, listener rebind heartbeat, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
   <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption, background AppOps and—on Android 15 or later—the sensitive-notification AppOp used by the existing ADB procedure. OTP Helper does not require Shizuku for normal operation. Shizuku Binder detection is asynchronous and uses the official Provider/listener lifecycle.</string>
+  <string name="permission_shizuku_status_missing">Shizuku status: Manager not installed</string>
+  <string name="permission_shizuku_status_disconnected">Shizuku status: Manager detected, Binder service not connected</string>
+  <string name="permission_shizuku_status_connected">Shizuku status: Binder connected (API %1$d, UID %2$d, permission %3$s)</string>
   <string name="permission_todo_shizuku_repair">Run optional Shizuku repair</string>
   <string name="run_repair">Run repair</string>
 
