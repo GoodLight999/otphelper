@@ -18,6 +18,7 @@
   <string name="persistence_channel_description">通知からのコード検出を常時利用可能に保ち、接続状態を表示します。</string>
   <string name="persistence_notification_title">OTP Helperが通知を監視しています</string>
   <string name="persistence_notification_listener_ok">通知Listenerは実際に接続中です</string>
+  <string name="persistence_notification_accessibility_ok">ユーザー補助の通知イベントは接続中ですが、標準Listenerは切断されています</string>
   <string name="persistence_notification_permission_missing">通知へのアクセスが無効です。修復をタップしてください</string>
   <string name="persistence_notification_listener_stalled">権限は有効ですがListenerが切断されています。修復をタップしてください</string>
   <string name="persistence_open_app">アプリを開く</string>
@@ -26,8 +27,12 @@
 
   <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、Listener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
   <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にしてください。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
+  <string name="accessibility_service_label">OTP通知リーダー</string>
+  <string name="accessibility_service_description">Androidの通知ユーザー補助イベントだけを読み、ワンタイムコードを検出します。画面内容の取得、ジェスチャー、キー入力、スクリーンショットは使用しません。端末ロック中は通知の公開版しか渡されない場合があります。</string>
+  <string name="permission_todo_accessibility_notifications">ユーザー補助の通知イベント読取りを有効化</string>
+  <string name="permission_accessibility_notification_desc">Androidの公開ユーザー補助APIによる任意の第2通知読取り経路です。Android 16でもTYPE_NOTIFICATION_STATE_CHANGEDとNotification本体の受渡しは公式仕様として残っています。ただし端末ロック中の非公開通知は公開版へ置換される場合があります。画面内容・ジェスチャー・キー入力・スクリーンショットは要求しません。</string>
 
-  <string name="diagnostics_desc">権限だけでなく実際の通知Listener接続状態、常駐サービス、復旧監視、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
+  <string name="diagnostics_desc">権限だけでなく、標準通知Listenerとユーザー補助通知イベントの実接続状態、常駐サービス、復旧監視、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
   <string name="copy_diagnostics">診断レポートをコピー</string>
   <string name="export_diagnostics">診断レポートをエクスポート</string>
   <string name="diagnostics_copied">診断レポートをコピーしました。</string>
