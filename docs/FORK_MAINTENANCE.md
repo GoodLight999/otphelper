@@ -1,35 +1,52 @@
 # otphelper fork maintenance
 
-This fork tracks [`jd1378/otphelper`](https://github.com/jd1378/otphelper) while adding an OEM-resilience layer, diagnostic tooling, phrase-list backup support, and an optional verified Shizuku repair path. Keep fork-specific code isolated where practical so upstream merges remain reviewable.
+This fork tracks [`jd1378/otphelper`](https://github.com/jd1378/otphelper) while adding an OEM-resilience layer, diagnostic tooling, phrase-list backup support, and Android 15/16 notification-body validation.
 
 ## Fork-specific goals
 
 1. Remain available on aggressive Android firmware, especially HONOR MagicOS.
 2. Recover the notification listener after process death, task removal, reboot, app update, and OEM listener detachment.
 3. Distinguish notification-access permission from the listener's actual connected state.
-4. Verify actual cross-package notification-body delivery rather than treating service connection as success.
-5. Keep Shizuku only as an optional means to restore notification access and the sensitive-notification AppOp; never make Shizuku a goal or prerequisite.
-6. Export/import sensitive, ignored, and cleanup phrases individually or as one complete backup.
-7. Let a user export a redacted diagnostic report without collecting logcat manually.
+4. Verify actual third-party notification-body delivery rather than treating service connection as success.
+5. Export/import sensitive, ignored, and cleanup phrases individually or as one complete backup.
+6. Let a user export a redacted diagnostic report without collecting logcat manually.
 
-## Notification-reading architecture
+## Supported notification-reading paths
 
-The supported ingestion paths are:
+The distributed app retains only paths that directly contribute to reading OTP data:
 
 - `NotificationListenerService` for notification mode;
-- the existing SMS receiver for the normal/SMS-capable flavor.
+- the existing SMS receiver in the normal/SMS-capable flavor.
 
-An Accessibility notification-event reader was prototyped and then removed. A connected Accessibility service does not prove that notification body text is present, and the exact HONOR/Android 16 target did not provide usable OTP text. The final APK contains no Accessibility service or Accessibility setup UI.
+### Accessibility was removed
 
-Android 15 and later redact OTP and similar sensitive data from untrusted notification listeners. The hidden `RECEIVE_SENSITIVE_NOTIFICATIONS` permission is not available to ordinary third-party apps. AOSP also provides the corresponding `RECEIVE_SENSITIVE_NOTIFICATIONS` AppOp specifically so shell can override the redaction without requiring the app to declare the hidden permission.
+A notification-event Accessibility service was prototyped, but a successful service connection did not prove that notification body text was available. On the target HONOR/Android 16 device, the service did not provide usable OTP text. The final APK contains no Accessibility service, setup UI, permission, or status handling.
 
-`NotificationIngestionSelfTest` therefore rejects same-package self-notifications. A valid test is created by shell/Shizuku using:
+### Shizuku was removed
 
-```text
-cmd notification post -t "OTP Helper external read test" <unique-tag> "One-time verification code: <token>"
-```
+The Shizuku prototype was corrected to use the proper provider and asynchronous Binder lifecycle, then tested on API 35 and API 36 with:
 
-The test passes only when OTP Helper receives the matching notification from a different package and the exact random token remains in the delivered notification body.
+- the sensitive-notification AppOp applied;
+- notification access fully disconnected and reconnected afterward;
+- a random six-digit OTP posted from a different package;
+- success requiring the exact token in the delivered body.
+
+The external OTP body still did not become readable in those tests. Shizuku therefore did not establish a useful notification-reading path and was removed completely. The distributed APK contains no Shizuku dependency, provider, permission, UI, service, AIDL interface, or diagnostic state.
+
+## Android 15/16 sensitive-notification handling
+
+Android 15 and later can hide OTP and other sensitive notification content from untrusted notification listeners. The app keeps the existing ADB procedure that applies the `RECEIVE_SENSITIVE_NOTIFICATIONS` AppOp and then restarts the app/listener so Android reevaluates the listener's trust state.
+
+A CI-only fixture APK is used to validate this behavior. It is a separate package and UID, has no launcher activity, and is never included in the distributed OTP Helper APKs.
+
+The fixture posts a notification containing a random six-digit token. The API 35 and API 36 tests require:
+
+1. the third-party OTP is not readable with the AppOp at its default value;
+2. the AppOp is set to `allow`;
+3. notification access is disconnected and reconnected;
+4. the exact random token becomes readable through `NotificationListenerService`.
+
+This is materially stronger than testing only `onListenerConnected()` or posting an OTP Helper self-notification.
 
 ## Persistence architecture
 
@@ -39,43 +56,13 @@ The test passes only when OTP Helper receives the matching notification from a d
 - `BootReceiver`: repairs after boot, user unlock, and package replacement.
 - `MonitoringHealthStore`: records actual `onListenerConnected` / `onListenerDisconnected`. A fresh process clears stale connected state before the real callback restores it.
 
-The persistent notification reports three distinct states:
+The persistent notification reports three states:
 
 1. notification access missing;
 2. notification listener actually connected;
 3. permission enabled while the listener is disconnected.
 
 Android can still prevent automatic resurrection after the user explicitly **Force stops** the app. No ordinary app can override that stopped state until the user launches it again or another permitted system event clears it.
-
-## Optional Shizuku repair and verification
-
-Shizuku is an insurance path only. Standard notification mode, SMS mode, the foreground service, WorkManager watchdog, and AlarmManager recovery do not depend on it.
-
-The implementation uses the standard Shizuku client protocol, which is also used by the `thedjchi/Shizuku` fork. That fork retains the manager application ID `moe.shizuku.privileged.api` and builds the standard API/provider projects.
-
-The app explicitly declares `rikka.shizuku.ShizukuProvider`. Merely adding the provider library dependency does not insert the provider into the application Manifest. The provider is the Binder delivery endpoint and must be exported with `${applicationId}.shizuku`, `multiprocess=false`, and `android.permission.INTERACT_ACROSS_USERS_FULL`.
-
-Shizuku Binder delivery is asynchronous. `Shizuku.pingBinder()` is only an alive check after delivery; it is not discovery. `ShizukuConnectionManager` registers:
-
-- `addBinderReceivedListenerSticky`;
-- `addBinderDeadListener`;
-- `addRequestPermissionResultListener`.
-
-The Permissions screen and diagnostic report distinguish:
-
-- manager not installed;
-- manager installed but Binder not received/alive;
-- Binder connected, with server API, UID, and permission state.
-
-After Binder and permission validation, the short-lived UserService reapplies:
-
-- notification-listener access;
-- Doze whitelist;
-- `RUN_IN_BACKGROUND` for the current Android user;
-- `RUN_ANY_IN_BACKGROUND` for the current Android user;
-- on Android 15 and later, `RECEIVE_SENSITIVE_NOTIFICATIONS` AppOp.
-
-A successful command exit is not considered success. The same shell-side UserService posts the unique external OTP probe, and Shizuku repair is reported as successful only when NotificationListener receives the actual random code. If the body is still redacted or missing, the UI explicitly reports that Shizuku is not a usable notification-reading path on that device.
 
 ## Phrase backup format
 
@@ -112,11 +99,9 @@ The Permissions screen can copy or export a diagnostic report containing:
 - version/flavor and device information;
 - Recents visibility;
 - notification permission and actual listener connection separately;
-- latest external notification-body probe result and timestamp;
 - foreground-service state;
 - battery-optimization state and app standby bucket;
 - watchdog WorkManager state;
-- Shizuku manager, Binder, server API/UID, and permission state;
 - a bounded, rotating, on-device log.
 
 The persistent log is redacted before writing. OTP/PIN/code values and standalone 4–10 digit values are replaced, and the log is size-limited with one rotated file.
@@ -134,39 +119,40 @@ Static/build job:
 - normal/play minified release APK builds;
 - ZIP integrity and debug signature verification;
 - merged-APK Manifest inspection for required services and permissions;
-- explicit verification of the Shizuku provider attributes;
-- explicit failure if LeakCanary/`LeakLauncherActivity` or the removed Accessibility service appears in an APK;
+- explicit failure if LeakCanary/`LeakLauncherActivity`, Shizuku, the removed Accessibility service, or the CI fixture appears in a distributed APK;
 - XML-level verification that `MainActivity` itself is not excluded from Recents.
 
 API 35 and API 36 emulator jobs:
 
+- install the CI-only notification fixture as a separate package/UID;
 - verify MainActivity creates a visible Recents task;
 - check service/receiver export and binding permissions;
-- verify the real Shizuku provider exists with the required attributes;
 - start the foreground persistence service;
 - confirm the periodic watchdog is registered;
 - grant notification access and wait for the real `onListenerConnected()` callback;
-- grant the sensitive-notification AppOp;
-- post the OTP probe from shell with `cmd notification post`;
-- require the exact random cross-package OTP token to reach NotificationListener;
+- compare third-party OTP delivery before and after the documented ADB AppOp procedure;
 - restore AppOp and notification-listener access after the test;
 - verify actual connection-state tracking is distinct from permission state.
 
-The legacy full-build workflow and the enhanced CI both cancel superseded runs for the same PR, preventing stale builds from hiding the current result.
+The fixture APK is built only for CI and is not uploaded as an installable OTP Helper artifact.
+
+The legacy full-build workflow and enhanced CI both cancel superseded runs for the same PR, preventing stale builds from hiding the current result.
 
 ## LeakCanary / “Leaks” launcher
 
-LeakCanary was accidentally included as a debug dependency, which installed its launcher activity as a visible “Leaks” app entry. LeakCanary is removed from all build variants. CI inspects every final debug APK and fails if any LeakCanary component remains. Updating to the corrected APK removes the component; an OEM launcher may require a launcher refresh or reboot to clear a stale cached icon.
+LeakCanary was accidentally included as a debug dependency, which installed its launcher activity as a visible “Leaks” app entry. LeakCanary is removed from all build variants. CI inspects every final debug APK and fails if any LeakCanary component remains.
+
+Updating to the corrected APK removes the component from OTP Helper. An OEM launcher may require a launcher refresh or reboot to clear a stale cached icon after the old build is replaced.
 
 ## MagicOS verification checklist
 
 The emulator verifies standard Android 15/16 behavior, but HONOR's proprietary process killer must still be tested on a physical device:
 
 1. Grant notification access and notification permission.
-2. In MagicOS App launch settings, disable automatic management and enable auto-launch, secondary launch, and background running.
-3. Open Recents and swipe down on the OTP Helper card until the lock icon appears.
-4. Exempt the app from battery optimization.
-5. If using Shizuku, confirm the Permissions screen shows Binder connected, then run “Repair and verify with Shizuku.” Treat only the notification-body-test success message as success.
+2. On Android 15/16, apply the ADB sensitive-notification AppOp procedure shown in the app, including the restart step.
+3. In MagicOS App launch settings, disable automatic management and enable auto-launch, secondary launch, and background running.
+4. Open Recents and swipe down on the OTP Helper card until the lock icon appears.
+5. Exempt the app from battery optimization.
 6. Send a real OTP notification while the app is open.
 7. Send one after leaving the app in Recents for 30 minutes.
 8. Remove the app task, wait for the persistent notification to return, then send another OTP.
@@ -188,8 +174,6 @@ For deeper investigation, `adb logcat -s OtpHelper:*` captures the same componen
 4. explicitly dispatches the enhanced Android CI for that bot branch;
 5. opens an issue when conflicts require manual resolution.
 
-The explicit CI dispatch is required because a PR created with the repository `GITHUB_TOKEN` does not normally trigger another `pull_request` workflow.
-
 Before merging an upstream-sync PR, review at least the Manifest, `App`, `MainActivity`, `NotificationListener`, WorkManager setup, phrase screens/ViewModels, Gradle dependencies, and resource-string conflicts.
 
 ## Release discipline
@@ -197,6 +181,5 @@ Before merging an upstream-sync PR, review at least the Manifest, `App`, `MainAc
 - Keep upstream version identity visible; add a fork suffix only when publishing binaries.
 - Build both `normal` and `play` flavors.
 - The `normal` flavor is the primary MagicOS build because it preserves SMS fallback.
-- Never make Shizuku a setup prerequisite.
-- Treat Shizuku as useful only when the external notification-body probe passes.
+- Do not ship experimental integrations that do not demonstrably improve notification-body access.
 - Treat the persistent notification as a functional status surface, not decoration.
