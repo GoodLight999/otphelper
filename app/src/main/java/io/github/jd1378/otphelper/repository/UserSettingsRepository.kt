@@ -34,6 +34,12 @@ interface UserSettingsRepository {
 
   suspend fun setCleanupPhrases(list: List<String>)
 
+  suspend fun setPhraseLists(
+      sensitive: List<String>,
+      ignored: List<String>,
+      cleanup: List<String>,
+  )
+
   suspend fun setVersion(version: Int)
 
   suspend fun setIsAutoDismissEnabled(value: Boolean)
