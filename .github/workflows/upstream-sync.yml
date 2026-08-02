@@ -58,7 +58,7 @@ jobs:
               --base main \
               --head "$BRANCH" \
               --title "chore: sync jd1378/otphelper upstream" \
-              --body "Automated clean merge from \`jd1378/otphelper:main\`. Review fork-specific persistence, Shizuku, Accessibility, and backup behavior before merging."
+              --body "Automated clean merge from \`jd1378/otphelper:main\`. Review fork-specific persistence, Android 15/16 notification handling, phrase backups, diagnostics, and CI fixture isolation before merging."
           fi
 
       - name: Dispatch validation for the sync branch
@@ -77,5 +77,5 @@ jobs:
           if ! gh issue list --state open --search "$title in:title" --json title --jq '.[].title' | grep -Fxq "$title"; then
             gh issue create \
               --title "$title" \
-              --body "The scheduled merge from \`jd1378/otphelper:main\` conflicted with fork-specific changes. Resolve manually while preserving the resilience and phrase-backup layers documented in \`docs/FORK_MAINTENANCE.md\`."
+              --body "The scheduled merge from \`jd1378/otphelper:main\` conflicted with fork-specific changes. Resolve manually while preserving the resilience, Android 15/16 notification, phrase-backup, and diagnostic layers documented in \`docs/FORK_MAINTENANCE.md\`."
           fi
