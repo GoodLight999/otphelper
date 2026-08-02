@@ -26,7 +26,8 @@ enum class ShizukuRepairResult {
 /** Optional elevated repair path. Normal monitoring never depends on Shizuku. */
 object ShizukuRepairManager {
   private const val REQUEST_CODE = 0x4f54
-  private const val MINIMUM_USER_SERVICE_VERSION = 10
+  private const val MINIMUM_USER_SERVICE_VERSION = 11
+  private const val USER_SERVICE_TAG = "otphelper-background-repair-v1"
   private const val BIND_TIMEOUT_SECONDS = 15L
 
   fun repair(context: Context): ShizukuRepairResult {
@@ -52,6 +53,7 @@ object ShizukuRepairManager {
     val args =
         Shizuku.UserServiceArgs(
                 ComponentName(BuildConfig.APPLICATION_ID, RepairUserService::class.java.name))
+            .tag(USER_SERVICE_TAG)
             .daemon(false)
             .processNameSuffix("repair")
             .debuggable(BuildConfig.DEBUG)
