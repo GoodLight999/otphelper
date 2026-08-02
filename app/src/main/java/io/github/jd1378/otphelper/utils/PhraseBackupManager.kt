@@ -81,7 +81,8 @@ object PhraseBackupManager {
       return normalize(jsonArrayToList(lists.getJSONArray(expectedKind.wireName)))
     }
 
-    val actualKind = PhraseListKind.fromWireName(root.optString("kind", null))
+    val actualKind =
+        if (root.has("kind")) PhraseListKind.fromWireName(root.optString("kind")) else null
     require(actualKind == null || actualKind == expectedKind) {
       "This backup contains ${actualKind?.wireName}, not ${expectedKind.wireName}"
     }
