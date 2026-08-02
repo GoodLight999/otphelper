@@ -31,6 +31,7 @@ object DiagnosticsReportManager {
     val notificationManager = NotificationManagerCompat.from(appContext)
     val listenerPermission = NotificationListener.isNotificationListenerServiceEnabled(appContext)
     val accessibilityEnabled = AccessibilityNotificationService.isEnabled(appContext)
+    val shizuku = ShizukuConnectionManager.snapshot(appContext)
     val health = MonitoringHealthStore.snapshot(appContext)
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
@@ -71,6 +72,12 @@ object DiagnosticsReportManager {
       appendLine("accessibilityNotificationServiceActuallyConnected=${health.accessibilityConnected}")
       appendLine(
           "accessibilityNotificationConnectionChangedAt=${formatMillis(health.accessibilityChangedAt)}")
+      appendLine("shizukuManagerInstalled=${shizuku.managerInstalled}")
+      appendLine("shizukuBinderAlive=${shizuku.binderAlive}")
+      appendLine("shizukuBinderEverReceived=${shizuku.binderEverReceived}")
+      appendLine("shizukuServerVersion=${shizuku.serverVersion ?: "unknown"}")
+      appendLine("shizukuServerUid=${shizuku.serverUid ?: "unknown"}")
+      appendLine("shizukuPermission=${shizuku.permission}")
       appendLine("persistenceServiceRunning=$persistenceRunning")
       appendLine("ignoringBatteryOptimizations=${powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: "unknown"}")
       appendLine("watchdogWork=$watchdogStates")
@@ -89,6 +96,12 @@ object DiagnosticsReportManager {
                 health.accessibilityConnected,
             )
           })
+      appendLine(
+          when {
+            !shizuku.managerInstalled -> "INFO Optional Shizuku Manager is not installed"
+            !shizuku.binderAlive -> "WARN Shizuku Manager is installed but Binder is not connected"
+            else -> "PASS Shizuku Binder is connected"
+          })
       appendLine(check("Foreground persistence service is running", persistenceRunning))
       appendLine(
           check(
@@ -98,7 +111,10 @@ object DiagnosticsReportManager {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
         appendLine(
             "INFO Android 15+ can redact OTP content from NotificationListenerService; " +
-                "the documented ADB AppOp applies to that standard-listener path")
+                "AOSP trusts the listener when RECEIVE_SENSITIVE_NOTIFICATIONS AppOp is allowed")
+        appendLine(
+            "INFO Shizuku repair applies that AppOp as shell/root and toggles listener access " +
+                "to refresh AOSP's trusted-listener UID cache")
         appendLine(
             "INFO Android Accessibility TYPE_NOTIFICATION_STATE_CHANGED remains a public API; " +
                 "AOSP may substitute Notification.publicVersion while the device is locked")
