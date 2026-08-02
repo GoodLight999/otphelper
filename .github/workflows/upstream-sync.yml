@@ -6,6 +6,7 @@ on:
     - cron: "23 3 * * 1"
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   issues: write
@@ -44,7 +45,7 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
-      - name: Open draft pull request
+      - name: Open or update draft pull request
         if: steps.merge.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,6 +60,13 @@ jobs:
               --title "chore: sync jd1378/otphelper upstream" \
               --body "Automated clean merge from \`jd1378/otphelper:main\`. Review fork-specific persistence, Shizuku, Accessibility, and backup behavior before merging."
           fi
+
+      - name: Dispatch validation for the sync branch
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.merge.outputs.branch }}
+        run: gh workflow run ci.yml --ref "$BRANCH"
 
       - name: Report merge conflict
         if: steps.merge.outputs.conflict == 'true'
