@@ -28,10 +28,25 @@ class PhraseBackupManagerTest {
   }
 
   @Test
+  fun singleImportAcceptsJsonStringArray() {
+    assertEquals(
+        listOf("first", "second"),
+        PhraseBackupManager.decodeSingle("[\"first\", \"second\"]", PhraseListKind.CLEANUP),
+    )
+  }
+
+  @Test
   fun singleImportRejectsWrongKind() {
     val encoded = PhraseBackupManager.encodeSingle(PhraseListKind.CLEANUP, listOf("remove"))
     assertThrows(IllegalArgumentException::class.java) {
       PhraseBackupManager.decodeSingle(encoded, PhraseListKind.SENSITIVE)
+    }
+  }
+
+  @Test
+  fun singleImportRejectsNonStringValues() {
+    assertThrows(IllegalArgumentException::class.java) {
+      PhraseBackupManager.decodeSingle("[\"valid\", 123]", PhraseListKind.SENSITIVE)
     }
   }
 
@@ -55,5 +70,61 @@ class PhraseBackupManagerTest {
     assertEquals(listOf("code"), decoded.sensitive)
     assertEquals(listOf("spam"), decoded.ignored)
     assertEquals(listOf("remove"), decoded.cleanup)
+  }
+
+  @Test
+  fun completeBackupRejectsUnknownSchema() {
+    assertThrows(IllegalArgumentException::class.java) {
+      PhraseBackupManager.decodeAll(
+          """
+          {
+            "schema": "some.other.app",
+            "version": 1,
+            "lists": {
+              "sensitive_phrases": [],
+              "ignored_phrases": [],
+              "cleanup_phrases": []
+            }
+          }
+          """.trimIndent()
+      )
+    }
+  }
+
+  @Test
+  fun completeBackupRejectsFutureVersion() {
+    assertThrows(IllegalArgumentException::class.java) {
+      PhraseBackupManager.decodeAll(
+          """
+          {
+            "schema": "otphelper.phrases",
+            "version": 999,
+            "lists": {
+              "sensitive_phrases": [],
+              "ignored_phrases": [],
+              "cleanup_phrases": []
+            }
+          }
+          """.trimIndent()
+      )
+    }
+  }
+
+  @Test
+  fun completeBackupRejectsMissingList() {
+    assertThrows(IllegalArgumentException::class.java) {
+      PhraseBackupManager.decodeAll(
+          """
+          {
+            "schema": "otphelper.phrases",
+            "version": 1,
+            "lists": {
+              "sensitive_phrases": [],
+              "ignored_phrases": []
+            }
+          }
+          """.trimIndent()
+      )
+    }
   }
 }
