@@ -13,8 +13,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.jd1378.otphelper.INTENT_ACTION_SHIZUKU_REPAIR
-import io.github.jd1378.otphelper.MainActivity
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
@@ -22,15 +20,12 @@ import io.github.jd1378.otphelper.ui.navigation.MainDestinations
 import io.github.jd1378.otphelper.utils.AutostartHelper
 import io.github.jd1378.otphelper.utils.DiagnosticsReportManager
 import io.github.jd1378.otphelper.utils.SettingsHelper
-import io.github.jd1378.otphelper.utils.ShizukuConnectionManager
-import io.github.jd1378.otphelper.utils.ShizukuConnectionSnapshot
 import io.github.jd1378.otphelper.utils.combine
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -67,18 +62,6 @@ constructor(
   private val _hasAutoStartSettings = MutableStateFlow(false)
   private val _hasRestrictedSettings = MutableStateFlow(false)
   private val _showSkipWarning = MutableStateFlow(false)
-  private val _shizukuSnapshot =
-      MutableStateFlow(
-          ShizukuConnectionSnapshot(
-              managerInstalled = false,
-              binderAlive = false,
-              binderEverReceived = false,
-              serverVersion = null,
-              serverUid = null,
-              permission = "unavailable",
-          ))
-
-  val shizukuSnapshot: StateFlow<ShizukuConnectionSnapshot> = _shizukuSnapshot.asStateFlow()
 
   val uiState: StateFlow<PermissionsUiState> =
       combine(
@@ -162,7 +145,6 @@ constructor(
         }
       }
       launch { _hasAutoStartSettings.update { AutostartHelper.hasAutostartSettings(context) } }
-      launch { _shizukuSnapshot.value = ShizukuConnectionManager.snapshot(context) }
 
       launch {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -192,14 +174,6 @@ constructor(
   fun onOpenBatteryOptimizationsPressed(context: Context) {
     val intent = Intent().setAction(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
     context.startActivity(intent)
-  }
-
-  fun onRunShizukuRepair(context: Context) {
-    context.startActivity(
-        Intent(context, MainActivity::class.java)
-            .setAction(INTENT_ACTION_SHIZUKU_REPAIR)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-    )
   }
 
   suspend fun buildDiagnostics(context: Context): String =
