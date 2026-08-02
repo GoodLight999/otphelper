@@ -2,6 +2,7 @@ package io.github.jd1378.otphelper
 
 import android.Manifest
 import android.app.ActivityManager
+import android.app.UiAutomation
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +33,9 @@ class ResilienceManifestTest {
   private val context: Context = ApplicationProvider.getApplicationContext()
   private val packageManager = context.packageManager
   private val instrumentation = InstrumentationRegistry.getInstrumentation()
+  private val nonSuppressingUiAutomation by lazy {
+    instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+  }
 
   @Test
   fun launcherRemainsVisibleInRecents() {
@@ -84,6 +89,15 @@ class ResilienceManifestTest {
         )
     assertFalse(listener.exported)
     assertEquals(Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE, listener.permission)
+
+    val accessibility =
+        packageManager.getServiceInfo(
+            ComponentName(context, AccessibilityNotificationService::class.java),
+            PackageManager.ComponentInfoFlags.of(PackageManager.GET_META_DATA.toLong()),
+        )
+    assertTrue(accessibility.exported)
+    assertEquals(Manifest.permission.BIND_ACCESSIBILITY_SERVICE, accessibility.permission)
+    assertNotNull(accessibility.metaData)
 
     val bootReceiver =
         packageManager.getReceiverInfo(
@@ -156,19 +170,75 @@ class ResilienceManifestTest {
   }
 
   @Test
-  fun monitoringHealthDistinguishesPermissionFromActualConnection() {
+  fun accessibilityNotificationServiceCanActuallyBind() {
+    val component =
+        ComponentName(context, AccessibilityNotificationService::class.java).flattenToShortString()
+    val previousServices = executeShellCommand("settings get secure enabled_accessibility_services").trim()
+    val previousEnabled = executeShellCommand("settings get secure accessibility_enabled").trim()
+    val restoredServices = previousServices.takeUnless { it.isBlank() || it == "null" }
+    val mergedServices =
+        restoredServices
+            ?.split(':')
+            ?.filter { it.isNotBlank() }
+            ?.plus(component)
+            ?.distinct()
+            ?.joinToString(":")
+            ?: component
+
+    MonitoringHealthStore.markAccessibilityConnected(context, false)
+    try {
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "ACCESS_RESTRICTED_SETTINGS allow")
+      executeShellCommand("settings put secure enabled_accessibility_services $mergedServices")
+      executeShellCommand("settings put secure accessibility_enabled 1")
+
+      val effectiveServices =
+          executeShellCommand("settings get secure enabled_accessibility_services").trim()
+      assertTrue(
+          "Accessibility component was not persisted in secure settings: $effectiveServices",
+          effectiveServices.split(':').contains(component),
+      )
+      assertTrue(
+          "Accessibility notification service did not report onServiceConnected",
+          waitForHealth(timeoutMs = 30_000L) { it.accessibilityConnected },
+      )
+    } finally {
+      if (restoredServices == null) {
+        executeShellCommand("settings delete secure enabled_accessibility_services")
+      } else {
+        executeShellCommand("settings put secure enabled_accessibility_services $restoredServices")
+      }
+      if (previousEnabled.isBlank() || previousEnabled == "null") {
+        executeShellCommand("settings delete secure accessibility_enabled")
+      } else {
+        executeShellCommand("settings put secure accessibility_enabled $previousEnabled")
+      }
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "ACCESS_RESTRICTED_SETTINGS default")
+    }
+  }
+
+  @Test
+  fun monitoringHealthDistinguishesPermissionFromActualConnections() {
     MonitoringHealthStore.markProcessStarted(context)
     var snapshot = MonitoringHealthStore.snapshot(context)
     assertFalse(snapshot.listenerConnected)
+    assertFalse(snapshot.accessibilityConnected)
 
     MonitoringHealthStore.markListenerConnected(context, true)
+    MonitoringHealthStore.markAccessibilityConnected(context, true)
     snapshot = MonitoringHealthStore.snapshot(context)
     assertTrue(snapshot.listenerConnected)
+    assertTrue(snapshot.accessibilityConnected)
     assertTrue(snapshot.listenerChangedAt > 0L)
+    assertTrue(snapshot.accessibilityChangedAt > 0L)
 
     MonitoringHealthStore.markListenerConnected(context, false)
     snapshot = MonitoringHealthStore.snapshot(context)
     assertFalse(snapshot.listenerConnected)
+    assertTrue(snapshot.accessibilityConnected)
   }
 
   private fun launchMainActivity(): MainActivity {
@@ -200,7 +270,7 @@ class ResilienceManifestTest {
   }
 
   private fun executeShellCommand(command: String): String {
-    val descriptor = instrumentation.uiAutomation.executeShellCommand(command)
+    val descriptor = nonSuppressingUiAutomation.executeShellCommand(command)
     return ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
   }
 }
