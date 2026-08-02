@@ -21,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import io.github.jd1378.otphelper.utils.AppLogger
+import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.utils.NotificationHelper
 
 const val INTENT_ACTION_REPAIR_BACKGROUND = "INTENT_ACTION_REPAIR_BACKGROUND"
@@ -161,10 +162,15 @@ class PersistenceService : Service() {
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-    val listenerGranted = NotificationListener.isNotificationListenerServiceEnabled(this)
+    val permissionGranted = NotificationListener.isNotificationListenerServiceEnabled(this)
+    val health = MonitoringHealthStore.snapshot(this)
     val status =
-        if (listenerGranted) R.string.persistence_notification_listener_ok
-        else R.string.persistence_notification_listener_waiting
+        when {
+          !permissionGranted -> R.string.persistence_notification_permission_missing
+          health.listenerConnected -> R.string.persistence_notification_listener_ok
+          health.accessibilityConnected -> R.string.persistence_notification_fallback_active
+          else -> R.string.persistence_notification_listener_stalled
+        }
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(R.drawable.ic_launcher_foreground)
