@@ -19,8 +19,10 @@ import rikka.shizuku.Shizuku
 
 enum class ShizukuRepairResult {
   SUCCESS,
-  UNAVAILABLE,
+  MANAGER_NOT_INSTALLED,
+  SERVICE_NOT_RUNNING,
   UNSUPPORTED,
+  PERMISSION_DENIED,
   PERMISSION_REQUESTED,
 }
 
@@ -32,17 +34,29 @@ object ShizukuRepairManager {
   private const val BIND_TIMEOUT_SECONDS = 15L
 
   fun repair(context: Context): ShizukuRepairResult {
-    if (!Shizuku.pingBinder()) return ShizukuRepairResult.UNAVAILABLE
+    val appContext = context.applicationContext
+    if (!ShizukuConnectionManager.isManagerInstalled(appContext)) {
+      return ShizukuRepairResult.MANAGER_NOT_INSTALLED
+    }
+
+    // Binder delivery through ShizukuProvider is asynchronous. Never treat an immediate false
+    // ping as proof that Shizuku is unavailable.
+    if (!ShizukuConnectionManager.awaitBinder(appContext)) {
+      return ShizukuRepairResult.SERVICE_NOT_RUNNING
+    }
     if (Shizuku.getVersion() < MINIMUM_USER_SERVICE_VERSION) {
       return ShizukuRepairResult.UNSUPPORTED
     }
     if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+      if (Shizuku.shouldShowRequestPermissionRationale()) {
+        return ShizukuRepairResult.PERMISSION_DENIED
+      }
       Handler(Looper.getMainLooper()).post { Shizuku.requestPermission(REQUEST_CODE) }
       return ShizukuRepairResult.PERMISSION_REQUESTED
     }
 
-    val packageName = context.packageName
-    val listener = ComponentName(context, NotificationListener::class.java).flattenToString()
+    val packageName = appContext.packageName
+    val listener = ComponentName(appContext, NotificationListener::class.java).flattenToString()
     val commands = buildRepairCommands(packageName, listener, Build.VERSION.SDK_INT)
 
     val args =
@@ -92,7 +106,7 @@ object ShizukuRepairManager {
       }
     }
 
-    PersistenceService.requestListenerRebind(context)
+    PersistenceService.requestListenerRebind(appContext)
     return ShizukuRepairResult.SUCCESS
   }
 
