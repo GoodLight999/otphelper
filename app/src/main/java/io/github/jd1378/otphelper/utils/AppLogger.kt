@@ -18,6 +18,9 @@ object AppLogger {
   private const val ROTATED_LOG_FILE = "otphelper.log.1"
   private const val MAX_LOG_BYTES = 512 * 1024L
   private const val MAX_EXPORTED_CHARS = 120_000
+  private val keyedSecretPattern =
+      Regex("(?i)(code|otp|pin)(\\s*[:=]?\\s*)[A-Za-z0-9-]{4,12}")
+  private val standaloneNumberPattern = Regex("(?<![A-Za-z0-9])\\d{4,10}(?![A-Za-z0-9])")
 
   private val executor = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "otphelper-file-logger").apply { isDaemon = true }
@@ -44,11 +47,8 @@ object AppLogger {
   }
 
   fun e(scope: String, message: String, throwable: Throwable? = null) {
-    if (throwable != null) {
-      Log.e(TAG, "[$scope] $message", throwable)
-    } else {
-      Log.e(TAG, "[$scope] $message")
-    }
+    if (throwable != null) Log.e(TAG, "[$scope] $message", throwable)
+    else Log.e(TAG, "[$scope] $message")
     persist("E", scope, message, throwable)
   }
 
@@ -89,13 +89,13 @@ object AppLogger {
     }
   }
 
-  internal fun redact(value: String): String =
-      value
-          .replace(
-              Regex("(?i)(code|otp|pin)(\\s*[:=]?\\s*)[A-Za-z0-9-]{4,12}"),
-              "\$1\$2<redacted>",
-          )
-          .replace(Regex("(?<![A-Za-z0-9])\\d{4,10}(?![A-Za-z0-9])"), "<redacted-number>")
+  internal fun redact(value: String): String {
+    val keyedRedacted =
+        keyedSecretPattern.replace(value) { match ->
+          "${match.groupValues[1]}${match.groupValues[2]}<redacted>"
+        }
+    return standaloneNumberPattern.replace(keyedRedacted, "<redacted-number>")
+  }
 
   private fun stackTrace(throwable: Throwable): String {
     val writer = StringWriter()
