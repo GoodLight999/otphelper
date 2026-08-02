@@ -4,6 +4,10 @@
 
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
   <uses-permission
       android:name="android.permission.ACCESS_NETWORK_STATE"
       tools:node="remove" />
@@ -21,19 +25,15 @@
         android:name=".MainActivity"
         android:exported="true"
         android:launchMode="singleTask"
-        android:theme="@style/Theme.App.Starting"
-        android:excludeFromRecents="true">
+        android:theme="@style/Theme.App.Starting">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
-
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
       <intent-filter>
         <action android:name="android.intent.action.VIEW" />
-
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-
         <data android:scheme="otphelper" />
         <data android:host="history_detail" />
         <data android:host="permissions" />
@@ -43,12 +43,39 @@
     </activity>
 
     <service
+        android:name=".PersistenceService"
+        android:exported="false"
+        android:foregroundServiceType="specialUse"
+        android:stopWithTask="false">
+      <property
+          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+          android:value="Maintains an explicitly enabled notification listener used to extract one-time codes and repairs OEM listener disconnections." />
+    </service>
+
+    <service
         android:name=".NotificationListener"
         android:exported="false"
-        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+        android:stopWithTask="false">
       <intent-filter>
         <action android:name="android.service.notification.NotificationListenerService" />
       </intent-filter>
+      <meta-data
+          android:name="android.service.notification.default_filter_types"
+          android:value="conversations|alerting|silent" />
+    </service>
+
+    <service
+        android:name=".AccessibilityNotificationService"
+        android:exported="true"
+        android:label="@string/app_name"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+          android:name="android.accessibilityservice"
+          android:resource="@xml/accessibility_notification_service" />
     </service>
 
     <service
@@ -73,13 +100,27 @@
         <action android:name="io.github.jd1378.otphelper.actions.show_details" />
       </intent-filter>
     </receiver>
+
     <receiver
         android:name=".BootReceiver"
+        android:enabled="true"
         android:exported="false">
       <intent-filter>
         <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.USER_UNLOCKED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
       </intent-filter>
     </receiver>
+
+    <receiver
+        android:name=".WatchdogReceiver"
+        android:enabled="true"
+        android:exported="false">
+      <intent-filter>
+        <action android:name="io.github.jd1378.otphelper.action.RESTART_PERSISTENCE" />
+      </intent-filter>
+    </receiver>
+
     <receiver
         android:name=".SmsListener"
         android:exported="true"
