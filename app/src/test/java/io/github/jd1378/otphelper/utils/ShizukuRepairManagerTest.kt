@@ -44,4 +44,17 @@ class ShizukuRepairManagerTest {
     assertTrue(commands.all { command -> !command.contains("example.package'quoted") })
     assertTrue(commands.any { it.contains("'example.package'\\''quoted'") })
   }
+
+  @Test
+  fun probeIsPostedByShellWithUniqueTagAndOtpBody() {
+    val command =
+        ShizukuRepairManager.buildProbeCommand(
+            NotificationIngestionSelfTest.Probe(token = "123456", tag = "otphelper_probe_1"))
+
+    assertEquals(
+        "cmd notification post -t 'OTP Helper external read test' " +
+            "'otphelper_probe_1' 'One-time verification code: 123456'",
+        command,
+    )
+  }
 }
