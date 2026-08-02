@@ -54,9 +54,6 @@ fun Permissions(
         viewModel.updatePermissionsStatus(context)
       }
 
-  val requestLabel = stringResource(R.string.request)
-  val openSettingsLabel = stringResource(R.string.open_settings)
-
   LaunchedEffect(lifecycleState) {
     when (lifecycleState) {
       Lifecycle.State.STARTED,
@@ -174,6 +171,28 @@ fun Permissions(
           },
       ) {
         viewModel.onOpenBatteryOptimizationsPressed(context)
+      }
+
+      Text(
+          stringResource(R.string.permission_resilience_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      TodoItem(
+          text = stringResource(R.string.permission_todo_accessibility_fallback),
+          actionText = stringResource(R.string.open_settings),
+          intermediate = true,
+          checked = true,
+      ) {
+        viewModel.onOpenAccessibilityPressed(context)
+      }
+      TodoItem(
+          text = stringResource(R.string.permission_todo_shizuku_repair),
+          actionText = stringResource(R.string.run_repair),
+          intermediate = true,
+          checked = true,
+      ) {
+        viewModel.onRunShizukuRepair(context)
       }
 
       if (uiState.modeOfOperation == ModeOfOperation.Notification &&
