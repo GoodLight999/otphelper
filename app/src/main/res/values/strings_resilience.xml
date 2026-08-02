@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="export_this_list">Export this list</string>
+  <string name="import_this_list">Import this list</string>
+  <string name="export_all_phrase_lists">Export all phrase lists</string>
+  <string name="import_all_phrase_lists">Import all phrase lists</string>
+  <string name="phrase_export_success">Phrase list exported.</string>
+  <string name="phrase_export_all_success">All phrase lists exported.</string>
+  <string name="phrase_backup_failed">Import/export failed: %1$s</string>
+  <plurals name="phrase_import_success">
+    <item quantity="one">Imported %1$d phrase.</item>
+    <item quantity="other">Imported %1$d phrases.</item>
+  </plurals>
+  <plurals name="phrase_import_all_success">
+    <item quantity="one">Imported %1$d phrase across all lists.</item>
+    <item quantity="other">Imported %1$d phrases across all lists.</item>
+  </plurals>
+
+  <string name="persistence_channel_name">OTP Helper background monitoring</string>
+  <string name="persistence_channel_description">Keeps notification code detection available and reports its health.</string>
+  <string name="persistence_notification_title">OTP Helper is monitoring notifications</string>
+  <string name="persistence_notification_listener_ok">Notification access connected</string>
+  <string name="persistence_notification_listener_waiting">Waiting for notification access; tap to repair</string>
+  <string name="persistence_open_app">Open app</string>
+  <string name="persistence_repair">Repair</string>
+  <string name="persistence_accessibility">Fallback access</string>
+  <string name="persistence_repair_started">Repair request sent.</string>
+  <string name="persistence_shizuku_unavailable">Shizuku is not running. Start Shizuku, then tap Repair again.</string>
+  <string name="persistence_shizuku_permission_requested">Approve the Shizuku permission, then tap Repair again.</string>
+  <string name="persistence_shizuku_success">Shizuku repair completed.</string>
+  <string name="persistence_shizuku_failed">Shizuku repair failed: %1$s</string>
+
+  <string name="accessibility_service_description">Optional fallback that reads notification-change events when the standard notification listener is disconnected by the device.</string>
+</resources>
