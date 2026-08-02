@@ -14,6 +14,11 @@ class AutostartHelper {
                 .setComponent(
                     ComponentName(
                         "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.appcontrol.activity.StartupAppControlActivity")),
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.hihonor.systemmanager",
                         "com.hihonor.systemmanager.startupmgr.ui.StartupAppControlActivity")),
             Intent()
                 .setComponent(
@@ -31,6 +36,11 @@ class AutostartHelper {
                         "com.hihonor.systemmanager",
                         "com.hihonor.systemmanager.optimize.bootstart.BootStartActivity")),
             // Huawei / older HONOR firmware.
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
