@@ -17,8 +17,11 @@ class RecentDetectedCodesHolder @Inject constructor() {
   @Synchronized
   fun isDuplicate(signature: String, now: Long): Boolean {
     pruneExpired(now)
-    val lastSeen = recentSignatures[signature]
-    recentSignatures[signature] = now
+    // Older callers append normalized notification text. Canonicalizing here makes deduplication
+    // work across the standard listener and the Accessibility fallback without duplicating logic.
+    val canonicalSignature = signature.split('|', limit = 3).take(2).joinToString("|")
+    val lastSeen = recentSignatures[canonicalSignature]
+    recentSignatures[canonicalSignature] = now
     return lastSeen != null && now - lastSeen <= DUPLICATE_DETECTION_WINDOW_MS
   }
 
