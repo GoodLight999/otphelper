@@ -98,6 +98,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun runBackgroundRepair() {
+    // These standard recovery operations always run. Shizuku remains an optional final step.
     PersistenceService.start(applicationContext)
     MyWorkManager.schedulePersistenceWatchdog(applicationContext)
     MyWorkManager.rebindListeners(applicationContext)
@@ -109,6 +110,8 @@ class MainActivity : AppCompatActivity() {
               ShizukuRepairResult.SUCCESS -> getString(R.string.persistence_shizuku_success)
               ShizukuRepairResult.UNAVAILABLE ->
                   getString(R.string.persistence_shizuku_unavailable)
+              ShizukuRepairResult.UNSUPPORTED ->
+                  getString(R.string.persistence_shizuku_unsupported)
               ShizukuRepairResult.PERMISSION_REQUESTED ->
                   getString(R.string.persistence_shizuku_permission_requested)
             }
@@ -116,7 +119,7 @@ class MainActivity : AppCompatActivity() {
             AppLogger.e("MainActivity", "Shizuku repair failed", error)
             getString(
                 R.string.persistence_shizuku_failed,
-                error.message ?: error.javaClass.simpleName,
+                error.cause?.message ?: error.message ?: error.javaClass.simpleName,
             )
           }
       Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
