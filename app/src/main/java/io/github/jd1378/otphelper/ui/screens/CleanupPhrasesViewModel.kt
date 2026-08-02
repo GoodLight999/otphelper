@@ -112,9 +112,7 @@ constructor(
     require(lists.cleanup.all(::isCleanupPhraseParsable)) {
       "The cleanup list contains an invalid regular expression"
     }
-    userSettingsRepository.setSensitivePhrases(lists.sensitive)
-    userSettingsRepository.setIgnoredPhrases(lists.ignored)
-    userSettingsRepository.setCleanupPhrases(lists.cleanup)
+    userSettingsRepository.setPhraseLists(lists.sensitive, lists.ignored, lists.cleanup)
     return lists.sensitive.size + lists.ignored.size + lists.cleanup.size
   }
 
