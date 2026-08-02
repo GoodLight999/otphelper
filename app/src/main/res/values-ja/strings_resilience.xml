@@ -32,7 +32,24 @@
   <string name="permission_todo_accessibility_notifications">ユーザー補助の通知イベント読取りを有効化</string>
   <string name="permission_accessibility_notification_desc">Androidの公開ユーザー補助APIによる任意の第2通知読取り経路です。Android 16でもTYPE_NOTIFICATION_STATE_CHANGEDとNotification本体の受渡しは公式仕様として残っています。ただし端末ロック中の非公開通知は公開版へ置換される場合があります。画面内容・ジェスチャー・キー入力・スクリーンショットは要求しません。</string>
 
-  <string name="diagnostics_desc">権限だけでなく、標準通知Listenerとユーザー補助通知イベントの実接続状態、常駐サービス、復旧監視、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
+  <string name="permission_shizuku_notification_desc">Android 15以降向けの任意の修復手段です。公式Shizuku APIのshell／root権限でRECEIVE_SENSITIVE_NOTIFICATIONS AppOpを設定し、Androidが保持するtrusted Listener情報を更新するため通知アクセスを再登録します。ユーザー補助の通知イベント経路やSMSモードには不要です。</string>
+  <string name="permission_shizuku_status">Shizuku：Manager %1$s／Binder %2$s／権限 %3$s</string>
+  <string name="permission_shizuku_installed">検出済み</string>
+  <string name="permission_shizuku_not_installed">未検出</string>
+  <string name="permission_shizuku_connected">接続済み</string>
+  <string name="permission_shizuku_not_connected">未接続</string>
+  <string name="permission_run_shizuku_repair">Shizukuで通知読取りを修復</string>
+  <string name="persistence_shizuku_applied_connected">機密通知AppOpを適用し、標準通知Listenerの再接続も確認しました。</string>
+  <string name="persistence_shizuku_applied_pending">機密通知AppOpは適用しましたが、標準通知Listenerの再接続はまだ確認できていません。</string>
+  <string name="persistence_shizuku_manager_missing">Shizuku Managerを検出できません。</string>
+  <string name="persistence_shizuku_service_not_running">Shizuku Managerはありますが、サービスのBinderを受信できません。Shizukuを起動してから再実行してください。</string>
+  <string name="persistence_shizuku_unsupported">このShizuku APIバージョンには対応していません。バージョン11以降が必要です。</string>
+  <string name="persistence_shizuku_insufficient_privilege">Shizukuサービスがshellまたはroot権限で動作していません。</string>
+  <string name="persistence_shizuku_permission_denied">OTP HelperへのShizuku権限が拒否されています。</string>
+  <string name="persistence_shizuku_permission_requested">Shizuku権限を要求しました。許可後、もう一度修復を実行してください。</string>
+  <string name="persistence_shizuku_failed">Shizukuによる通知修復に失敗しました：%1$s</string>
+
+  <string name="diagnostics_desc">権限だけでなく、標準通知Listenerとユーザー補助通知イベントの実接続状態、Shizuku Manager／Binder状態、常駐サービス、復旧監視、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
   <string name="copy_diagnostics">診断レポートをコピー</string>
   <string name="export_diagnostics">診断レポートをエクスポート</string>
   <string name="diagnostics_copied">診断レポートをコピーしました。</string>
