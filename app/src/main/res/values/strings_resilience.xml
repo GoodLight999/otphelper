@@ -20,6 +20,7 @@
   <string name="persistence_channel_description">Keeps notification code detection available and reports its health.</string>
   <string name="persistence_notification_title">OTP Helper is monitoring notifications</string>
   <string name="persistence_notification_listener_ok">Notification listener is connected</string>
+  <string name="persistence_notification_accessibility_ok">Accessibility notification events are connected; the standard listener is disconnected</string>
   <string name="persistence_notification_permission_missing">Notification access is disabled; tap Repair</string>
   <string name="persistence_notification_listener_stalled">Permission is enabled, but the listener is disconnected; tap Repair</string>
   <string name="persistence_open_app">Open app</string>
@@ -28,8 +29,12 @@
 
   <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, listener rebind heartbeat, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
+  <string name="accessibility_service_label">OTP notification reader</string>
+  <string name="accessibility_service_description">Reads only Android notification accessibility events to detect one-time codes. It does not inspect windows, perform gestures, read key input, or take screenshots. While the device is locked, Android may provide only the notification public version.</string>
+  <string name="permission_todo_accessibility_notifications">Enable notification reading through Accessibility events</string>
+  <string name="permission_accessibility_notification_desc">Optional second notification-reading path defined by Android's public Accessibility API. Android 16 still exposes TYPE_NOTIFICATION_STATE_CHANGED and its Notification parcelable. For a locked device, a non-public notification may be replaced with its public version. This service requests no window content, gestures, key events, or screenshots.</string>
 
-  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, actual notification-listener connection, service state, watchdog state, device information and recent OTP Helper logs.</string>
+  <string name="diagnostics_desc">Generate a redacted diagnostic report containing current permissions, actual notification-listener and Accessibility notification-event connections, service state, watchdog state, device information and recent OTP Helper logs.</string>
   <string name="copy_diagnostics">Copy diagnostic report</string>
   <string name="export_diagnostics">Export diagnostic report</string>
   <string name="diagnostics_copied">Diagnostic report copied.</string>
