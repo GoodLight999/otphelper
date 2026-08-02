@@ -7,9 +7,12 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkManager
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
@@ -115,6 +118,27 @@ class ResilienceManifestTest {
   }
 
   @Test
+  fun notificationListenerCanActuallyBindOnApi35() {
+    val component = ComponentName(context, NotificationListener::class.java).flattenToString()
+    MonitoringHealthStore.markListenerConnected(context, false)
+    try {
+      executeShellCommand("cmd notification allow_listener $component")
+      val deadline = SystemClock.elapsedRealtime() + 15_000L
+      while (
+          !MonitoringHealthStore.snapshot(context).listenerConnected &&
+              SystemClock.elapsedRealtime() < deadline) {
+        Thread.sleep(100L)
+      }
+      assertTrue(
+          "NotificationListenerService did not report onListenerConnected after permission grant",
+          MonitoringHealthStore.snapshot(context).listenerConnected,
+      )
+    } finally {
+      executeShellCommand("cmd notification disallow_listener $component")
+    }
+  }
+
+  @Test
   fun monitoringHealthDistinguishesPermissionFromActualConnection() {
     MonitoringHealthStore.markProcessStarted(context)
     var snapshot = MonitoringHealthStore.snapshot(context)
@@ -133,5 +157,11 @@ class ResilienceManifestTest {
     snapshot = MonitoringHealthStore.snapshot(context)
     assertFalse(snapshot.listenerConnected)
     assertTrue(snapshot.accessibilityConnected)
+  }
+
+  private fun executeShellCommand(command: String): String {
+    val descriptor =
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+    return ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
   }
 }
