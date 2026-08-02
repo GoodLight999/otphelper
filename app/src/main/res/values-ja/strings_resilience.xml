@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="export_this_list">このリストをエクスポート</string>
+  <string name="import_this_list">このリストをインポート</string>
+  <string name="export_all_phrase_lists">すべての語句リストを一括エクスポート</string>
+  <string name="import_all_phrase_lists">すべての語句リストを一括インポート</string>
+  <string name="phrase_export_success">語句リストをエクスポートしました。</string>
+  <string name="phrase_export_all_success">すべての語句リストをエクスポートしました。</string>
+  <string name="phrase_backup_failed">インポート／エクスポートに失敗しました：%1$s</string>
+  <plurals name="phrase_import_success">
+    <item quantity="other">%1$d件の語句をインポートしました。</item>
+  </plurals>
+  <plurals name="phrase_import_all_success">
+    <item quantity="other">全リストへ合計%1$d件の語句をインポートしました。</item>
+  </plurals>
+
+  <string name="persistence_channel_name">OTP Helper バックグラウンド監視</string>
+  <string name="persistence_channel_description">通知からのコード検出を常時利用可能に保ち、接続状態を表示します。</string>
+  <string name="persistence_notification_title">OTP Helperが通知を監視しています</string>
+  <string name="persistence_notification_listener_ok">通知へのアクセスは接続済みです</string>
+  <string name="persistence_notification_listener_waiting">通知へのアクセスを待機中です。タップして修復してください</string>
+  <string name="persistence_open_app">アプリを開く</string>
+  <string name="persistence_repair">修復</string>
+  <string name="persistence_accessibility">代替アクセス</string>
+  <string name="persistence_repair_started">修復処理を開始しました。</string>
+  <string name="persistence_shizuku_unavailable">Shizukuが起動していません。Shizukuを起動してから、もう一度修復してください。</string>
+  <string name="persistence_shizuku_permission_requested">Shizuku権限を許可してから、もう一度修復してください。</string>
+  <string name="persistence_shizuku_success">Shizukuによる修復が完了しました。</string>
+  <string name="persistence_shizuku_failed">Shizukuによる修復に失敗しました：%1$s</string>
+
+  <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。ユーザー補助の代替経路は通知状態の変化だけを読み取ります。Shizuku修復は任意機能で、通知アクセス、Doze除外、バックグラウンドAppOpsを再設定します。</string>
+  <string name="permission_todo_accessibility_fallback">通知専用のユーザー補助代替経路を有効にする</string>
+  <string name="permission_todo_shizuku_repair">任意のShizukuバックグラウンド修復を実行する</string>
+  <string name="run_repair">修復を実行</string>
+
+  <string name="accessibility_service_description">端末によって標準の通知Listenerが切断された場合に、通知状態の変化を読み取る任意の代替経路です。</string>
+</resources>
