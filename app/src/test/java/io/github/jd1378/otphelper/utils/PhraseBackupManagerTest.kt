@@ -1,5 +1,6 @@
 package io.github.jd1378.otphelper.utils
 
+import java.io.StringReader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -17,6 +18,20 @@ class PhraseBackupManagerTest {
         listOf("code", "otp"),
         PhraseBackupManager.decodeSingle(encoded, PhraseListKind.SENSITIVE),
     )
+  }
+
+  @Test
+  fun boundedReaderAcceptsMaximumSizedInput() {
+    val input = "x".repeat(PhraseBackupManager.MAX_FILE_CHARS)
+    assertEquals(input, PhraseBackupManager.readBounded(StringReader(input)))
+  }
+
+  @Test
+  fun boundedReaderRejectsOversizedInputBeforeReturningIt() {
+    val input = "x".repeat(PhraseBackupManager.MAX_FILE_CHARS + 1)
+    assertThrows(IllegalArgumentException::class.java) {
+      PhraseBackupManager.readBounded(StringReader(input))
+    }
   }
 
   @Test
