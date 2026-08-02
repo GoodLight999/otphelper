@@ -17,17 +17,14 @@ import androidx.work.WorkManager
 import io.github.jd1378.otphelper.utils.MonitoringHealthSnapshot
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.utils.NotificationIngestionSelfTest
-import io.github.jd1378.otphelper.utils.ShizukuRepairManager
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import rikka.shizuku.ShizukuProvider
 
 @RunWith(AndroidJUnit4::class)
 class ResilienceManifestTest {
@@ -88,20 +85,6 @@ class ResilienceManifestTest {
     assertFalse(listener.exported)
     assertEquals(Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE, listener.permission)
 
-    val shizukuProvider =
-        packageManager.getProviderInfo(
-            ComponentName(context, ShizukuProvider::class.java),
-            PackageManager.ComponentInfoFlags.of(0),
-        )
-    assertTrue(shizukuProvider.exported)
-    assertFalse(shizukuProvider.multiprocess)
-    assertEquals("${context.packageName}.shizuku", shizukuProvider.authority)
-    assertEquals(
-        "android.permission.INTERACT_ACROSS_USERS_FULL",
-        shizukuProvider.readPermission,
-    )
-    assertNotNull(shizukuProvider.applicationInfo)
-
     val bootReceiver =
         packageManager.getReceiverInfo(
             ComponentName(context, BootReceiver::class.java),
@@ -115,6 +98,17 @@ class ResilienceManifestTest {
             PackageManager.ComponentInfoFlags.of(0),
         )
     assertFalse(watchdogReceiver.exported)
+  }
+
+  @Test
+  fun notificationFixtureIsInstalledAsAnotherPackage() {
+    val fixture =
+        packageManager.getPackageInfo(
+            NotificationIngestionSelfTest.FIXTURE_PACKAGE,
+            PackageManager.PackageInfoFlags.of(0),
+        )
+    assertEquals(NotificationIngestionSelfTest.FIXTURE_PACKAGE, fixture.packageName)
+    assertNotEquals(context.applicationInfo.uid, fixture.applicationInfo?.uid)
   }
 
   @Test
@@ -161,11 +155,14 @@ class ResilienceManifestTest {
   }
 
   @Test
-  fun sensitiveOtpBodyIsProtectedByDefaultAndReadableAfterReconnectWithAppOp() {
+  fun realThirdPartyOtpIsProtectedByDefaultAndReadableAfterAdbAppOp() {
     val component = ComponentName(context, NotificationListener::class.java).flattenToString()
     MonitoringHealthStore.markListenerConnected(context, false)
     try {
       executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
+      executeShellCommand(
+          "pm grant ${NotificationIngestionSelfTest.FIXTURE_PACKAGE} " +
+              Manifest.permission.POST_NOTIFICATIONS)
       executeShellCommand(
           "cmd appops set --user current ${context.packageName} " +
               "RECEIVE_SENSITIVE_NOTIFICATIONS default")
@@ -176,12 +173,16 @@ class ResilienceManifestTest {
       )
 
       val protectedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
-      val protectedOutput = executeShellCommand(ShizukuRepairManager.buildProbeCommand(protectedProbe))
-      assertTrue("Shell notification command did not post: $protectedOutput", protectedOutput.contains("posting"))
+      val protectedOutput =
+          executeShellCommand(NotificationIngestionSelfTest.buildFixtureBroadcastCommand(protectedProbe))
+      assertTrue(
+          "Fixture broadcast failed: $protectedOutput",
+          protectedOutput.contains("Broadcast completed"),
+      )
       val protectedResult = NotificationIngestionSelfTest.awaitResult(context)
       assertNotEquals(
-          "The external OTP probe was readable without the sensitive-notification AppOp; " +
-              "this test would not prove the bypass",
+          "The real third-party OTP was readable without the sensitive-notification AppOp; " +
+              "the test would not prove the ADB bypass",
           NotificationIngestionSelfTest.State.PASSED,
           protectedResult,
       )
@@ -203,10 +204,14 @@ class ResilienceManifestTest {
       )
 
       val allowedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
-      val allowedOutput = executeShellCommand(ShizukuRepairManager.buildProbeCommand(allowedProbe))
-      assertTrue("Shell notification command did not post: $allowedOutput", allowedOutput.contains("posting"))
+      val allowedOutput =
+          executeShellCommand(NotificationIngestionSelfTest.buildFixtureBroadcastCommand(allowedProbe))
+      assertTrue(
+          "Fixture broadcast failed: $allowedOutput",
+          allowedOutput.contains("Broadcast completed"),
+      )
       assertEquals(
-          "Listener reconnected but did not receive the real cross-package OTP body after AppOp allow",
+          "Listener reconnected but did not receive the real third-party OTP body after AppOp allow",
           NotificationIngestionSelfTest.State.PASSED,
           NotificationIngestionSelfTest.awaitResult(context),
       )
