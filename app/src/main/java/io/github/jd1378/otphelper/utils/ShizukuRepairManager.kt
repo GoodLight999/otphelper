@@ -45,8 +45,6 @@ object ShizukuRepairManager {
       return ShizukuRepairResult.MANAGER_NOT_INSTALLED
     }
 
-    // Binder delivery through ShizukuProvider is asynchronous. Never treat an immediate false
-    // ping as proof that Shizuku is unavailable.
     if (!ShizukuConnectionManager.awaitBinder(appContext)) {
       return ShizukuRepairResult.SERVICE_NOT_RUNNING
     }
@@ -63,7 +61,7 @@ object ShizukuRepairManager {
 
     val packageName = appContext.packageName
     val listener = ComponentName(appContext, NotificationListener::class.java).flattenToString()
-    val commands = buildRepairCommands(packageName, listener, Build.VERSION.SDK_INT)
+    val repairCommands = buildRepairCommands(packageName, listener, Build.VERSION.SDK_INT)
 
     val args =
         Shizuku.UserServiceArgs(
@@ -73,28 +71,22 @@ object ShizukuRepairManager {
             .processNameSuffix("repair")
             .debuggable(BuildConfig.DEBUG)
             .version(BuildConfig.VERSION_CODE)
-    val result = CompletableFuture<String>()
+    val serviceFuture = CompletableFuture<IRepairService>()
     val connection =
         object : ServiceConnection {
           override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            Thread(
-                    {
-                      try {
-                        val service = IRepairService.Stub.asInterface(binder)
-                        requireNotNull(service) { "Shizuku returned an invalid repair service" }
-                        result.complete(service.execute(commands))
-                      } catch (error: Throwable) {
-                        result.completeExceptionally(error)
-                      }
-                    },
-                    "otphelper-shizuku-repair",
-                )
-                .start()
+            val service = IRepairService.Stub.asInterface(binder)
+            if (service == null) {
+              serviceFuture.completeExceptionally(
+                  IllegalStateException("Shizuku returned an invalid repair service"))
+            } else {
+              serviceFuture.complete(service)
+            }
           }
 
           override fun onServiceDisconnected(name: ComponentName?) {
-            if (!result.isDone) {
-              result.completeExceptionally(
+            if (!serviceFuture.isDone) {
+              serviceFuture.completeExceptionally(
                   IllegalStateException("Shizuku repair service disconnected unexpectedly"))
             }
           }
@@ -102,30 +94,34 @@ object ShizukuRepairManager {
 
     try {
       Shizuku.bindUserService(args, connection)
-      val output = result.get(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-      AppLogger.i("ShizukuRepair", output.ifBlank { "repair commands completed" })
+      val service = serviceFuture.get(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+      val repairOutput = service.execute(repairCommands)
+      AppLogger.i("ShizukuRepair", repairOutput.ifBlank { "repair commands completed" })
+
+      PersistenceService.requestListenerRebind(appContext)
+      if (!waitForListenerConnection(appContext)) {
+        return ShizukuRepairResult.NOTIFICATION_LISTENER_NOT_CONNECTED
+      }
+      if (!NotificationHelper.hasNotifPermission(appContext) ||
+          !NotificationManagerCompat.from(appContext).areNotificationsEnabled()) {
+        return ShizukuRepairResult.NOTIFICATION_PERMISSION_MISSING
+      }
+
+      // Post from the Shizuku/shell side. A same-package self-notification would not prove that
+      // real third-party OTP bodies survive Android's sensitive-notification redaction.
+      val probe = NotificationIngestionSelfTest.prepareExternalProbe(appContext)
+      val probeOutput = service.execute(arrayOf(buildProbeCommand(probe)))
+      AppLogger.i("ShizukuRepair", probeOutput.ifBlank { "external probe notification posted" })
+      return when (NotificationIngestionSelfTest.awaitResult(appContext)) {
+        NotificationIngestionSelfTest.State.PASSED -> ShizukuRepairResult.SUCCESS
+        else -> ShizukuRepairResult.NOTIFICATION_TEXT_UNREADABLE
+      }
     } finally {
       try {
         Shizuku.unbindUserService(args, connection, true)
       } catch (error: Throwable) {
         AppLogger.w("ShizukuRepair", "unable to unbind repair service: ${error.message}")
       }
-    }
-
-    PersistenceService.requestListenerRebind(appContext)
-    if (!waitForListenerConnection(appContext)) {
-      return ShizukuRepairResult.NOTIFICATION_LISTENER_NOT_CONNECTED
-    }
-    if (!NotificationHelper.hasNotifPermission(appContext) ||
-        !NotificationManagerCompat.from(appContext).areNotificationsEnabled()) {
-      return ShizukuRepairResult.NOTIFICATION_PERMISSION_MISSING
-    }
-
-    // A Shizuku command succeeding is not enough. Keep this feature only if the listener can read
-    // the actual six-digit body after the AppOp repair.
-    return when (NotificationIngestionSelfTest.runBlocking(appContext)) {
-      NotificationIngestionSelfTest.State.PASSED -> ShizukuRepairResult.SUCCESS
-      else -> ShizukuRepairResult.NOTIFICATION_TEXT_UNREADABLE
     }
   }
 
@@ -150,6 +146,11 @@ object ShizukuRepairManager {
             }
           }
           .toTypedArray()
+
+  internal fun buildProbeCommand(probe: NotificationIngestionSelfTest.Probe): String =
+      "cmd notification post -t ${shellQuote("OTP Helper external read test")} " +
+          "${shellQuote(probe.tag)} " +
+          shellQuote("One-time verification code: ${probe.token}")
 
   private fun waitForListenerConnection(context: Context): Boolean {
     val deadline = SystemClock.elapsedRealtime() + LISTENER_WAIT_MS
