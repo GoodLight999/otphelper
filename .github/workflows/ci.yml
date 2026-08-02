@@ -80,8 +80,17 @@ jobs:
             manifest="app/build/reports/apk-inspection/${name}.manifest.xml"
             grep -q 'io.github.jd1378.otphelper.PersistenceService' "$manifest"
             grep -q 'io.github.jd1378.otphelper.NotificationListener' "$manifest"
-            grep -q 'io.github.jd1378.otphelper.AccessibilityNotificationService' "$manifest"
+            grep -q 'rikka.shizuku.ShizukuProvider' "$manifest"
+            grep -q 'moe.shizuku.manager.permission.API_V23' "$manifest"
             grep -q 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE' "$manifest"
+            if grep -qi 'leakcanary\|LeakLauncherActivity\|LeakActivity' "$manifest"; then
+              echo "LeakCanary components must not be shipped in $apk" >&2
+              exit 1
+            fi
+            if grep -q 'io.github.jd1378.otphelper.AccessibilityNotificationService' "$manifest"; then
+              echo "Obsolete Accessibility notification reader is still packaged in $apk" >&2
+              exit 1
+            fi
             python3 - "$manifest" <<'PY'
           import sys
           import xml.etree.ElementTree as ET
@@ -91,6 +100,7 @@ jobs:
           application = root.find("application")
           if application is None:
               raise SystemExit("Merged APK Manifest has no application element")
+
           main = next(
               (
                   activity
@@ -104,6 +114,25 @@ jobs:
               raise SystemExit("MainActivity is missing from merged APK Manifest")
           if main.get(android + "excludeFromRecents") == "true":
               raise SystemExit("MainActivity is excluded from Recents")
+
+          provider = next(
+              (
+                  item
+                  for item in application.findall("provider")
+                  if item.get(android + "name") == "rikka.shizuku.ShizukuProvider"
+              ),
+              None,
+          )
+          if provider is None:
+              raise SystemExit("ShizukuProvider is missing from merged APK Manifest")
+          if provider.get(android + "exported") != "true":
+              raise SystemExit("ShizukuProvider must be exported")
+          if provider.get(android + "multiprocess") != "false":
+              raise SystemExit("ShizukuProvider must use multiprocess=false")
+          if provider.get(android + "authorities") != "io.github.jd1378.otphelper.shizuku":
+              raise SystemExit("ShizukuProvider authority is incorrect")
+          if provider.get(android + "permission") != "android.permission.INTERACT_ACROSS_USERS_FULL":
+              raise SystemExit("ShizukuProvider permission is incorrect")
           PY
           done
           test "$found" -eq 1
