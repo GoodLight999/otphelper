@@ -30,19 +30,28 @@
   <string name="persistence_shizuku_unsupported">This Shizuku API version does not support the optional repair service. Standard repair has still been requested.</string>
   <string name="persistence_shizuku_permission_denied">Shizuku permission was denied. Allow OTP Helper in Shizuku Manager, then try again.</string>
   <string name="persistence_shizuku_permission_requested">Approve the optional Shizuku permission, then run its repair again.</string>
-  <string name="persistence_shizuku_success">Optional Shizuku repair completed.</string>
+  <string name="persistence_shizuku_notification_permission_missing">Shizuku settings were applied, but OTP Helper cannot post the verification notification. Grant notification permission first.</string>
+  <string name="persistence_shizuku_listener_not_connected">Shizuku settings were applied, but the notification listener did not connect.</string>
+  <string name="persistence_shizuku_notification_unreadable">Shizuku settings were applied, but OTP Helper still could not read the verification code from the notification body. Shizuku is not providing a usable notification-reading path on this device.</string>
+  <string name="persistence_shizuku_success">Shizuku repair completed and the real notification-body read test passed.</string>
   <string name="persistence_shizuku_failed">Optional Shizuku repair failed: %1$s</string>
 
   <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, listener rebind heartbeat, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
-  <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption, background AppOps and—on Android 15 or later—the sensitive-notification AppOp used by the existing ADB procedure. OTP Helper does not require Shizuku for normal operation. Shizuku Binder detection is asynchronous and uses the official Provider/listener lifecycle.</string>
+  <string name="notification_self_test_desc">Posts a temporary six-digit-code notification and checks whether NotificationListener receives the actual body text. A connected listener alone is not considered success.</string>
+  <string name="notification_self_test_run">Test actual notification reading</string>
+  <string name="notification_self_test_passed">Success: OTP Helper read the actual six-digit notification body.</string>
+  <string name="notification_self_test_failed">Failure: the listener received the notification but its actual code text was missing or redacted.</string>
+  <string name="notification_self_test_timeout">Failure: OTP Helper did not receive the verification notification before timeout.</string>
+  <string name="notification_self_test_prerequisite">Enable notification permission and notification access before running the test.</string>
+  <string name="permission_shizuku_optional_desc">Optional repair only. Shizuku can reapply notification access and, on Android 15 or later, the sensitive-notification AppOp. It is treated as useful only when the real notification-body self-test passes. Shizuku Binder detection uses the official Provider and asynchronous listener lifecycle.</string>
   <string name="permission_shizuku_status_missing">Shizuku status: Manager not installed</string>
   <string name="permission_shizuku_status_disconnected">Shizuku status: Manager detected, Binder service not connected</string>
   <string name="permission_shizuku_status_connected">Shizuku status: Binder connected (API %1$d, UID %2$d, permission %3$s)</string>
-  <string name="permission_todo_shizuku_repair">Run optional Shizuku repair</string>
+  <string name="permission_todo_shizuku_repair">Repair and verify with Shizuku</string>
   <string name="run_repair">Run repair</string>
 
-  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, actual notification-listener connection, service state, watchdog state, Shizuku Binder state, device information and recent OTP Helper logs.</string>
+  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, actual notification-listener connection, notification-body self-test, service state, watchdog state, Shizuku Binder state, device information and recent OTP Helper logs.</string>
   <string name="copy_diagnostics">Copy diagnostic report</string>
   <string name="export_diagnostics">Export diagnostic report</string>
   <string name="diagnostics_copied">Diagnostic report copied.</string>
