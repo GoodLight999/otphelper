@@ -1,7 +1,6 @@
 package io.github.jd1378.otphelper.worker
 
 import android.content.Context
-import android.content.Intent
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -44,13 +43,11 @@ constructor(
 
     if (userSettings.modeOfOperation == ModeOfOperation.SMS) {
       if (hasSmsPermission(applicationContext)) {
-        try {
-          applicationContext.startService(Intent(applicationContext, SmsListener::class.java))
-        } catch (error: Throwable) {
-          AppLogger.e(TAG, "Failed to start SmsListener", error)
-        }
+        // SmsListener is a manifest BroadcastReceiver, not a Service. Re-enabling its component is
+        // the valid repair operation; startService() against it always fails.
         SmsListener.disable(applicationContext)
         SmsListener.enable(applicationContext)
+        AppLogger.i(TAG, "SMS receiver component refreshed")
       } else if (!silent) {
         NotificationHelper.sendSmsPermissionRevokedNotif(applicationContext)
       }
