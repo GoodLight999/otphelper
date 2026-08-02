@@ -12,7 +12,6 @@ import android.os.SystemClock
 import androidx.core.app.NotificationManagerCompat
 import io.github.jd1378.otphelper.BuildConfig
 import io.github.jd1378.otphelper.NotificationListener
-import io.github.jd1378.otphelper.PersistenceService
 import io.github.jd1378.otphelper.shizuku.IRepairService
 import io.github.jd1378.otphelper.shizuku.RepairUserService
 import java.util.concurrent.CompletableFuture
@@ -37,7 +36,7 @@ object ShizukuRepairManager {
   private const val MINIMUM_USER_SERVICE_VERSION = 11
   private const val USER_SERVICE_TAG = "otphelper-background-repair-v1"
   private const val BIND_TIMEOUT_SECONDS = 15L
-  private const val LISTENER_WAIT_MS = 8_000L
+  private const val LISTENER_WAIT_MS = 10_000L
 
   fun repair(context: Context): ShizukuRepairResult {
     val appContext = context.applicationContext
@@ -95,10 +94,14 @@ object ShizukuRepairManager {
     try {
       Shizuku.bindUserService(args, connection)
       val service = serviceFuture.get(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+
+      // NotificationManagerService can retain the listener's trust state for the lifetime of the
+      // connection. Apply the AppOp first, then force a complete disallow/allow reconnect so the
+      // new sensitive-notification trust state is evaluated before the probe is posted.
+      MonitoringHealthStore.markListenerConnected(appContext, false)
       val repairOutput = service.execute(repairCommands)
       AppLogger.i("ShizukuRepair", repairOutput.ifBlank { "repair commands completed" })
 
-      PersistenceService.requestListenerRebind(appContext)
       if (!waitForListenerConnection(appContext)) {
         return ShizukuRepairResult.NOTIFICATION_LISTENER_NOT_CONNECTED
       }
@@ -131,7 +134,6 @@ object ShizukuRepairManager {
       sdkInt: Int,
   ): Array<String> =
       buildList {
-            add("cmd notification allow_listener ${shellQuote(listenerComponent)}")
             add("cmd deviceidle whitelist +${shellQuote(packageName)}")
             add(
                 "cmd appops set --user current ${shellQuote(packageName)} " +
@@ -144,6 +146,8 @@ object ShizukuRepairManager {
                   "cmd appops set --user current ${shellQuote(packageName)} " +
                       "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
             }
+            add("cmd notification disallow_listener ${shellQuote(listenerComponent)}")
+            add("cmd notification allow_listener ${shellQuote(listenerComponent)}")
           }
           .toTypedArray()
 
