@@ -32,8 +32,9 @@ object DiagnosticsReportManager {
     val activityManager = appContext.getSystemService(ActivityManager::class.java)
     val powerManager = appContext.getSystemService(PowerManager::class.java)
     val notificationManager = NotificationManagerCompat.from(appContext)
-    val listenerEnabled = NotificationListener.isNotificationListenerServiceEnabled(appContext)
-    val accessibilityEnabled = isAccessibilityFallbackEnabled(appContext)
+    val listenerPermission = NotificationListener.isNotificationListenerServiceEnabled(appContext)
+    val accessibilityPermission = isAccessibilityFallbackEnabled(appContext)
+    val health = MonitoringHealthStore.snapshot(appContext)
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
     val watchdogStates = watchdogStates(appContext)
@@ -67,8 +68,12 @@ object DiagnosticsReportManager {
       appendLine("[monitoring]")
       appendLine("postNotificationsGranted=${NotificationHelper.hasNotifPermission(appContext)}")
       appendLine("notificationsEnabled=${notificationManager.areNotificationsEnabled()}")
-      appendLine("notificationListenerEnabled=$listenerEnabled")
-      appendLine("accessibilityFallbackEnabled=$accessibilityEnabled")
+      appendLine("notificationListenerPermission=$listenerPermission")
+      appendLine("notificationListenerActuallyConnected=${health.listenerConnected}")
+      appendLine("notificationListenerConnectionChangedAt=${formatMillis(health.listenerChangedAt)}")
+      appendLine("accessibilityFallbackPermission=$accessibilityPermission")
+      appendLine("accessibilityFallbackActuallyConnected=${health.accessibilityConnected}")
+      appendLine("accessibilityConnectionChangedAt=${formatMillis(health.accessibilityChangedAt)}")
       appendLine("persistenceServiceRunning=$persistenceRunning")
       appendLine("ignoringBatteryOptimizations=${powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: "unknown"}")
       appendLine("watchdogWork=$watchdogStates")
@@ -77,12 +82,20 @@ object DiagnosticsReportManager {
       appendLine()
       appendLine("[automatic checks]")
       appendLine(check("App is visible in Recents", !excludedFromRecents))
-      appendLine(check("Notification access is enabled", listenerEnabled))
+      appendLine(check("Notification access permission is enabled", listenerPermission))
+      appendLine(check("Notification listener is actually connected", health.listenerConnected))
       appendLine(check("Foreground persistence service is running", persistenceRunning))
-      appendLine(check("Battery optimization exemption is enabled", powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) == true))
       appendLine(
-          if (accessibilityEnabled) "PASS Accessibility fallback is enabled"
-          else "INFO Accessibility fallback is optional and currently disabled")
+          check(
+              "Battery optimization exemption is enabled",
+              powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) == true,
+          ))
+      appendLine(
+          when {
+            health.accessibilityConnected -> "PASS Accessibility fallback is actually connected"
+            accessibilityPermission -> "WARN Accessibility fallback is enabled but not connected"
+            else -> "INFO Accessibility fallback is optional and currently disabled"
+          })
       appendLine(
           if (shizukuState.startsWith("available")) "INFO Optional Shizuku is available"
           else "INFO Optional Shizuku is not active; normal monitoring does not depend on it")
@@ -96,10 +109,15 @@ object DiagnosticsReportManager {
   private fun check(name: String, passed: Boolean): String =
       if (passed) "PASS $name" else "WARN $name"
 
-  private fun timestamp(): String {
+  private fun timestamp(): String = formatDate(Date())
+
+  private fun formatMillis(value: Long): String =
+      if (value <= 0L) "never" else formatDate(Date(value))
+
+  private fun formatDate(date: Date): String {
     val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
     format.timeZone = TimeZone.getDefault()
-    return format.format(Date())
+    return format.format(date)
   }
 
   private fun isAccessibilityFallbackEnabled(context: Context): Boolean {
@@ -125,10 +143,7 @@ object DiagnosticsReportManager {
     val component = ComponentName(context, MainActivity::class.java)
     val activityInfo =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          context.packageManager.getActivityInfo(
-              component,
-              PackageManager.ComponentInfoFlags.of(0),
-          )
+          context.packageManager.getActivityInfo(component, PackageManager.ComponentInfoFlags.of(0))
         } else {
           @Suppress("DEPRECATION")
           context.packageManager.getActivityInfo(component, 0)
