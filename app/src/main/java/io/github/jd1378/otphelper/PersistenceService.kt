@@ -1,5 +1,6 @@
 package io.github.jd1378.otphelper
 
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -20,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import io.github.jd1378.otphelper.utils.AppLogger
+import io.github.jd1378.otphelper.utils.NotificationHelper
 
 const val INTENT_ACTION_REPAIR_BACKGROUND = "INTENT_ACTION_REPAIR_BACKGROUND"
 const val INTENT_ACTION_SHIZUKU_REPAIR = "INTENT_ACTION_SHIZUKU_REPAIR"
@@ -52,20 +54,25 @@ class PersistenceService : Service() {
     }
 
     fun scheduleRestart(context: Context, delayMs: Long = RESTART_DELAY_MS) {
-      val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-      val restartIntent = Intent(context, WatchdogReceiver::class.java).setAction(WatchdogReceiver.ACTION_RESTART)
-      val pendingIntent =
-          PendingIntent.getBroadcast(
-              context,
-              4817,
-              restartIntent,
-              PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-          )
-      alarmManager.setAndAllowWhileIdle(
-          AlarmManager.ELAPSED_REALTIME_WAKEUP,
-          android.os.SystemClock.elapsedRealtime() + delayMs,
-          pendingIntent,
-      )
+      try {
+        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+        val restartIntent =
+            Intent(context, WatchdogReceiver::class.java).setAction(WatchdogReceiver.ACTION_RESTART)
+        val pendingIntent =
+            PendingIntent.getBroadcast(
+                context,
+                4817,
+                restartIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        alarmManager.setAndAllowWhileIdle(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            android.os.SystemClock.elapsedRealtime() + delayMs,
+            pendingIntent,
+        )
+      } catch (error: Throwable) {
+        AppLogger.e(TAG, "Unable to schedule persistence recovery alarm", error)
+      }
     }
   }
 
@@ -123,7 +130,9 @@ class PersistenceService : Service() {
     }
   }
 
+  @SuppressLint("MissingPermission")
   private fun updateNotification() {
+    if (!NotificationHelper.hasNotifPermission(this)) return
     if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) return
     NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildNotification())
   }
@@ -158,7 +167,7 @@ class PersistenceService : Service() {
         else R.string.persistence_notification_listener_waiting
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(R.mipmap.ic_launcher)
+        .setSmallIcon(R.drawable.ic_launcher_foreground)
         .setContentTitle(getString(R.string.persistence_notification_title))
         .setContentText(getString(status))
         .setContentIntent(openIntent)
@@ -180,7 +189,7 @@ class PersistenceService : Service() {
         NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.persistence_channel_name),
-                NotificationManager.IMPORTANCE_MIN,
+                NotificationManager.IMPORTANCE_LOW,
             )
             .apply {
               description = getString(R.string.persistence_channel_description)
