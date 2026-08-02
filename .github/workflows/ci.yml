@@ -56,6 +56,16 @@ jobs:
         run: |
           set -euo pipefail
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          apk_analyzer="$(command -v apkanalyzer || true)"
+          if [ -z "$apk_analyzer" ]; then
+            apk_analyzer="$(find "$ANDROID_HOME/cmdline-tools" -type f -name apkanalyzer -perm -u+x | head -n 1)"
+          fi
+          if [ -z "$apk_analyzer" ] || [ ! -x "$apk_analyzer" ]; then
+            echo "Unable to locate apkanalyzer in Android SDK" >&2
+            find "$ANDROID_HOME" -maxdepth 5 -name 'apkanalyzer*' -print >&2 || true
+            exit 1
+          fi
+
           mkdir -p app/build/reports/apk-inspection
           found=0
           for apk in app/build/outputs/apk/*/debug/*.apk; do
@@ -65,7 +75,7 @@ jobs:
             unzip -tq "$apk"
             "$build_tools/apksigner" verify --verbose --print-certs "$apk" \
               > "app/build/reports/apk-inspection/${name}.signature.txt"
-            apkanalyzer manifest print "$apk" \
+            "$apk_analyzer" manifest print "$apk" \
               > "app/build/reports/apk-inspection/${name}.manifest.xml"
             manifest="app/build/reports/apk-inspection/${name}.manifest.xml"
             grep -q 'io.github.jd1378.otphelper.MainActivity' "$manifest"
