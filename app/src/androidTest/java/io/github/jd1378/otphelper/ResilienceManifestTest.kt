@@ -2,7 +2,6 @@ package io.github.jd1378.otphelper
 
 import android.Manifest
 import android.app.ActivityManager
-import android.app.UiAutomation
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -25,15 +24,13 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import rikka.shizuku.ShizukuProvider
 
 @RunWith(AndroidJUnit4::class)
 class ResilienceManifestTest {
   private val context: Context = ApplicationProvider.getApplicationContext()
   private val packageManager = context.packageManager
   private val instrumentation = InstrumentationRegistry.getInstrumentation()
-  private val nonSuppressingUiAutomation by lazy {
-    instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-  }
 
   @Test
   fun launcherRemainsVisibleInRecents() {
@@ -44,8 +41,6 @@ class ResilienceManifestTest {
         )
     assertEquals(0, activityInfo.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS)
 
-    // ActivityScenario's intent matcher crashes when a singleTask activity is launched without an
-    // action. Launch the real MAIN intent through Instrumentation instead.
     val activity = launchMainActivity()
     try {
       val tasks = activity.getSystemService(ActivityManager::class.java).appTasks
@@ -90,14 +85,16 @@ class ResilienceManifestTest {
     assertFalse(listener.exported)
     assertEquals(Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE, listener.permission)
 
-    val accessibility =
-        packageManager.getServiceInfo(
-            ComponentName(context, AccessibilityNotificationService::class.java),
-            PackageManager.ComponentInfoFlags.of(PackageManager.GET_META_DATA.toLong()),
+    val shizukuProvider =
+        packageManager.getProviderInfo(
+            ComponentName(context, ShizukuProvider::class.java),
+            PackageManager.ComponentInfoFlags.of(0),
         )
-    assertTrue(accessibility.exported)
-    assertEquals(Manifest.permission.BIND_ACCESSIBILITY_SERVICE, accessibility.permission)
-    assertNotNull(accessibility.metaData)
+    assertTrue(shizukuProvider.exported)
+    assertFalse(shizukuProvider.multiprocess)
+    assertEquals("${context.packageName}.shizuku", shizukuProvider.authority)
+    assertEquals(Manifest.permission.INTERACT_ACROSS_USERS_FULL, shizukuProvider.readPermission)
+    assertNotNull(shizukuProvider.applicationInfo)
 
     val bootReceiver =
         packageManager.getReceiverInfo(
@@ -116,8 +113,6 @@ class ResilienceManifestTest {
 
   @Test
   fun foregroundServiceAndWatchdogCanStart() {
-    // Keep the app visibly foreground while exercising startForegroundService; Android can reject
-    // a background FGS launch even though the service itself is otherwise valid.
     val activity = launchMainActivity()
     try {
       PersistenceService.start(context)
@@ -160,77 +155,19 @@ class ResilienceManifestTest {
   }
 
   @Test
-  fun accessibilityFallbackCanActuallyBindOnApi35() {
-    val component =
-        ComponentName(context, AccessibilityNotificationService::class.java).flattenToShortString()
-    val previousServices = executeShellCommand("settings get secure enabled_accessibility_services").trim()
-    val previousEnabled = executeShellCommand("settings get secure accessibility_enabled").trim()
-    val restoredServices = previousServices.takeUnless { it.isBlank() || it == "null" }
-    val mergedServices =
-        restoredServices
-            ?.split(':')
-            ?.filter { it.isNotBlank() }
-            ?.plus(component)
-            ?.distinct()
-            ?.joinToString(":")
-            ?: component
-
-    MonitoringHealthStore.markAccessibilityConnected(context, false)
-    try {
-      // Test APKs are sideloaded, so Android's restricted-settings gate must be explicitly opened
-      // before the Accessibility service can be enabled through secure settings.
-      executeShellCommand(
-          "cmd appops set --user current ${context.packageName} " +
-              "ACCESS_RESTRICTED_SETTINGS allow")
-      executeShellCommand("settings put secure enabled_accessibility_services $mergedServices")
-      executeShellCommand("settings put secure accessibility_enabled 1")
-
-      val effectiveServices =
-          executeShellCommand("settings get secure enabled_accessibility_services").trim()
-      assertTrue(
-          "Accessibility component was not persisted in secure settings: $effectiveServices",
-          effectiveServices.split(':').contains(component),
-      )
-      assertTrue(
-          "Accessibility fallback did not report onServiceConnected after enablement",
-          waitForHealth(timeoutMs = 30_000L) { it.accessibilityConnected },
-      )
-    } finally {
-      if (restoredServices == null) {
-        executeShellCommand("settings delete secure enabled_accessibility_services")
-      } else {
-        executeShellCommand("settings put secure enabled_accessibility_services $restoredServices")
-      }
-      if (previousEnabled.isBlank() || previousEnabled == "null") {
-        executeShellCommand("settings delete secure accessibility_enabled")
-      } else {
-        executeShellCommand("settings put secure accessibility_enabled $previousEnabled")
-      }
-      executeShellCommand(
-          "cmd appops set --user current ${context.packageName} " +
-              "ACCESS_RESTRICTED_SETTINGS default")
-    }
-  }
-
-  @Test
   fun monitoringHealthDistinguishesPermissionFromActualConnection() {
     MonitoringHealthStore.markProcessStarted(context)
     var snapshot = MonitoringHealthStore.snapshot(context)
     assertFalse(snapshot.listenerConnected)
-    assertFalse(snapshot.accessibilityConnected)
 
     MonitoringHealthStore.markListenerConnected(context, true)
-    MonitoringHealthStore.markAccessibilityConnected(context, true)
     snapshot = MonitoringHealthStore.snapshot(context)
     assertTrue(snapshot.listenerConnected)
-    assertTrue(snapshot.accessibilityConnected)
     assertTrue(snapshot.listenerChangedAt > 0L)
-    assertTrue(snapshot.accessibilityChangedAt > 0L)
 
     MonitoringHealthStore.markListenerConnected(context, false)
     snapshot = MonitoringHealthStore.snapshot(context)
     assertFalse(snapshot.listenerConnected)
-    assertTrue(snapshot.accessibilityConnected)
   }
 
   private fun launchMainActivity(): MainActivity {
@@ -262,7 +199,7 @@ class ResilienceManifestTest {
   }
 
   private fun executeShellCommand(command: String): String {
-    val descriptor = nonSuppressingUiAutomation.executeShellCommand(command)
+    val descriptor = instrumentation.uiAutomation.executeShellCommand(command)
     return ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
   }
 }
