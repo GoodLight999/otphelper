@@ -147,15 +147,16 @@ class NotificationListener : NotificationListenerService() {
     val notification = sbn.notification
     val rawNotificationText = extractNotificationText(notification)
 
-    // This must run before mode checks and own-package filtering. It proves that the listener
-    // received the actual notification body, not merely that Android connected the service.
+    // This must run before mode checks and own-package filtering. It proves that a shell/Shizuku
+    // notification from another package delivered its actual body text.
     if (
         NotificationIngestionSelfTest.handlePostedNotification(
             applicationContext,
             sbn.packageName,
-            sbn.id,
+            sbn.tag,
             rawNotificationText,
         )) {
+      cancelNotification(sbn.key)
       return
     }
 
