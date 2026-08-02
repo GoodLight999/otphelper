@@ -1,0 +1,73 @@
+name: Upstream sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream into a bot branch
+        id: merge
+        env:
+          UPSTREAM_REPOSITORY: jd1378/otphelper
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git fetch upstream main
+          branch="bot/upstream-sync-$(date -u +%Y%m%d)"
+          git switch -C "$branch" origin/main
+          if ! git merge --no-ff --no-edit upstream/main; then
+            git merge --abort || true
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --quiet origin/main...HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git push --force-with-lease origin "$branch"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open draft pull request
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.merge.outputs.branch }}
+        run: |
+          existing="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --draft \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore: sync jd1378/otphelper upstream" \
+              --body "Automated clean merge from \`jd1378/otphelper:main\`. Review fork-specific persistence, Shizuku, Accessibility, and backup behavior before merging."
+          fi
+
+      - name: Report merge conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Upstream sync conflict $(date -u +%Y-%m-%d)"
+          if ! gh issue list --state open --search "$title in:title" --json title --jq '.[].title' | grep -Fxq "$title"; then
+            gh issue create \
+              --title "$title" \
+              --body "The scheduled merge from \`jd1378/otphelper:main\` conflicted with fork-specific changes. Resolve manually while preserving the resilience and phrase-backup layers documented in \`docs/FORK_MAINTENANCE.md\`."
+          fi
