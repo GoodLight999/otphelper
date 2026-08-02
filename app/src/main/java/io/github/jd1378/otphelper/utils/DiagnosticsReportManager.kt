@@ -30,11 +30,9 @@ object DiagnosticsReportManager {
     val notificationManager = NotificationManagerCompat.from(appContext)
     val listenerPermission = NotificationListener.isNotificationListenerServiceEnabled(appContext)
     val health = MonitoringHealthStore.snapshot(appContext)
-    val selfTest = NotificationIngestionSelfTest.snapshot(appContext)
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
     val watchdogStates = watchdogStates(appContext)
-    val shizuku = ShizukuConnectionManager.snapshot(appContext)
 
     return buildString {
       appendLine("OTP Helper diagnostics")
@@ -67,46 +65,26 @@ object DiagnosticsReportManager {
       appendLine("notificationListenerPermission=$listenerPermission")
       appendLine("notificationListenerActuallyConnected=${health.listenerConnected}")
       appendLine("notificationListenerConnectionChangedAt=${formatMillis(health.listenerChangedAt)}")
-      appendLine("notificationBodySelfTest=${selfTest.state}")
-      appendLine("notificationBodySelfTestStartedAt=${formatMillis(selfTest.startedAt)}")
       appendLine("persistenceServiceRunning=$persistenceRunning")
       appendLine("ignoringBatteryOptimizations=${powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: "unknown"}")
       appendLine("watchdogWork=$watchdogStates")
       appendLine("autostartSettingsAvailable=${AutostartHelper.hasAutostartSettings(appContext)}")
       appendLine()
-      appendLine("[shizuku]")
-      appendLine("managerPackage=${ShizukuConnectionManager.MANAGER_PACKAGE}")
-      appendLine("managerInstalled=${shizuku.managerInstalled}")
-      appendLine("binderAlive=${shizuku.binderAlive}")
-      appendLine("binderEverReceived=${shizuku.binderEverReceived}")
-      appendLine("serverVersion=${shizuku.serverVersion ?: "unknown"}")
-      appendLine("serverUid=${shizuku.serverUid ?: "unknown"}")
-      appendLine("permission=${shizuku.permission}")
-      appendLine()
       appendLine("[automatic checks]")
       appendLine(check("App is visible in Recents", !excludedFromRecents))
       appendLine(check("Notification access permission is enabled", listenerPermission))
       appendLine(check("Notification listener is actually connected", health.listenerConnected))
-      appendLine(
-          when (selfTest.state) {
-            NotificationIngestionSelfTest.State.PASSED ->
-                "PASS Actual notification body is readable"
-            NotificationIngestionSelfTest.State.IDLE ->
-                "INFO Actual notification-body self-test has not been run"
-            else -> "WARN Actual notification-body self-test state=${selfTest.state}"
-          })
       appendLine(check("Foreground persistence service is running", persistenceRunning))
       appendLine(
           check(
               "Battery optimization exemption is enabled",
               powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) == true,
           ))
-      appendLine(
-          when {
-            !shizuku.managerInstalled -> "INFO Optional Shizuku Manager is not installed"
-            shizuku.binderAlive -> "PASS Optional Shizuku Binder is connected"
-            else -> "WARN Shizuku Manager is installed but its Binder is not connected"
-          })
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+        appendLine(
+            "INFO Android 15+ OTP visibility requires the documented ADB " +
+                "RECEIVE_SENSITIVE_NOTIFICATIONS AppOp procedure")
+      }
       appendLine()
       appendLine("[recent redacted log]")
       val logs = AppLogger.readRecent(appContext)
