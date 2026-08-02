@@ -207,13 +207,15 @@ class NotificationListener : NotificationListenerService() {
             }
           }
           if (!codeDetected) {
-            outer@ for (key in notification_text_arrays_keys) {
-              extras.getCharSequenceArray(key)?.forEach { charSeq ->
+            for (key in notification_text_arrays_keys) {
+              val array = extras.getCharSequenceArray(key) ?: continue
+              for (charSeq in array) {
                 if (!charSeq.isNullOrBlank() && charSeq.contains(message.body)) {
                   codeDetected = true
-                  return@outer
+                  break
                 }
               }
+              if (codeDetected) break
             }
           }
         }
