@@ -91,8 +91,11 @@ object AppLogger {
 
   internal fun redact(value: String): String =
       value
+          .replace(
+              Regex("(?i)(code|otp|pin)(\\s*[:=]?\\s*)[A-Za-z0-9-]{4,12}"),
+              "\$1\$2<redacted>",
+          )
           .replace(Regex("(?<![A-Za-z0-9])\\d{4,10}(?![A-Za-z0-9])"), "<redacted-number>")
-          .replace(Regex("(?i)(code|otp|pin)(\\s*[:=]?\\s*)[A-Za-z0-9-]{4,12}"), "$1$2<redacted>")
 
   private fun stackTrace(throwable: Throwable): String {
     val writer = StringWriter()
