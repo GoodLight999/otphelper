@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
+import io.github.jd1378.otphelper.AccessibilityNotificationService
 import io.github.jd1378.otphelper.BuildConfig
 import io.github.jd1378.otphelper.MainActivity
 import io.github.jd1378.otphelper.NotificationListener
@@ -29,6 +30,7 @@ object DiagnosticsReportManager {
     val powerManager = appContext.getSystemService(PowerManager::class.java)
     val notificationManager = NotificationManagerCompat.from(appContext)
     val listenerPermission = NotificationListener.isNotificationListenerServiceEnabled(appContext)
+    val accessibilityEnabled = AccessibilityNotificationService.isEnabled(appContext)
     val health = MonitoringHealthStore.snapshot(appContext)
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
@@ -65,6 +67,10 @@ object DiagnosticsReportManager {
       appendLine("notificationListenerPermission=$listenerPermission")
       appendLine("notificationListenerActuallyConnected=${health.listenerConnected}")
       appendLine("notificationListenerConnectionChangedAt=${formatMillis(health.listenerChangedAt)}")
+      appendLine("accessibilityNotificationServiceEnabled=$accessibilityEnabled")
+      appendLine("accessibilityNotificationServiceActuallyConnected=${health.accessibilityConnected}")
+      appendLine(
+          "accessibilityNotificationConnectionChangedAt=${formatMillis(health.accessibilityChangedAt)}")
       appendLine("persistenceServiceRunning=$persistenceRunning")
       appendLine("ignoringBatteryOptimizations=${powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: "unknown"}")
       appendLine("watchdogWork=$watchdogStates")
@@ -74,6 +80,15 @@ object DiagnosticsReportManager {
       appendLine(check("App is visible in Recents", !excludedFromRecents))
       appendLine(check("Notification access permission is enabled", listenerPermission))
       appendLine(check("Notification listener is actually connected", health.listenerConnected))
+      appendLine(
+          if (!accessibilityEnabled) {
+            "INFO Optional Accessibility notification-event path is disabled"
+          } else {
+            check(
+                "Accessibility notification-event service is actually connected",
+                health.accessibilityConnected,
+            )
+          })
       appendLine(check("Foreground persistence service is running", persistenceRunning))
       appendLine(
           check(
@@ -82,8 +97,11 @@ object DiagnosticsReportManager {
           ))
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
         appendLine(
-            "INFO Android 15+ OTP visibility requires the documented ADB " +
-                "RECEIVE_SENSITIVE_NOTIFICATIONS AppOp procedure")
+            "INFO Android 15+ can redact OTP content from NotificationListenerService; " +
+                "the documented ADB AppOp applies to that standard-listener path")
+        appendLine(
+            "INFO Android Accessibility TYPE_NOTIFICATION_STATE_CHANGED remains a public API; " +
+                "AOSP may substitute Notification.publicVersion while the device is locked")
       }
       appendLine()
       appendLine("[recent redacted log]")
