@@ -24,6 +24,8 @@ class App : Application(), Configuration.Provider {
             "debug=${BuildConfig.DEBUG}, smsModeAvailable=${BuildConfig.SMS_MODE_AVAILABLE}",
     )
     createNotificationChannels(applicationContext)
+    PersistenceService.start(applicationContext)
+    MyWorkManager.schedulePersistenceWatchdog(applicationContext)
     MyWorkManager.rebindListeners(applicationContext, true)
   }
 }
