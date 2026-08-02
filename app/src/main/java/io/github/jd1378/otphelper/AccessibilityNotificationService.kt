@@ -10,13 +10,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.github.jd1378.otphelper.di.AutoUpdatingListenerUtils
 import io.github.jd1378.otphelper.di.RecentDetectedCodesHolder
 import io.github.jd1378.otphelper.utils.AppLogger
+import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.worker.CodeDetectedWorker
 import javax.inject.Inject
 
-/**
- * Optional, user-enabled fallback for OEMs that repeatedly detach NotificationListenerService.
- * It listens only to notification-state events and never inspects windows or performs gestures.
- */
+/** Notification-only fallback for OEMs that repeatedly detach NotificationListenerService. */
 @AndroidEntryPoint
 class AccessibilityNotificationService : AccessibilityService() {
   @Inject lateinit var autoUpdatingListenerUtils: AutoUpdatingListenerUtils
@@ -24,6 +22,7 @@ class AccessibilityNotificationService : AccessibilityService() {
 
   override fun onServiceConnected() {
     super.onServiceConnected()
+    MonitoringHealthStore.markAccessibilityConnected(applicationContext, true)
     AppLogger.i(TAG, "accessibility notification fallback connected")
     PersistenceService.start(applicationContext)
   }
@@ -32,9 +31,7 @@ class AccessibilityNotificationService : AccessibilityService() {
     if (event?.eventType != AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) return
     if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification) return
 
-    // A surviving AccessibilityService can revive the foreground monitor after an OEM kill.
     PersistenceService.start(applicationContext)
-
     val packageName = event.packageName?.toString()?.takeIf { it.isNotBlank() } ?: return
     if (packageName == applicationContext.packageName) return
 
@@ -53,7 +50,7 @@ class AccessibilityNotificationService : AccessibilityService() {
 
     val cleaned = extractor.cleanup(text)
     val code = extractor.getCode(cleaned, false)?.takeIf { it.isNotBlank() } ?: return
-    val signature = "$packageName|$code|$cleaned"
+    val signature = RecentDetectedCodesHolder.signature(packageName, code)
     if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) return
 
     val stableId = signature.hashCode().toUInt().toString()
@@ -80,6 +77,7 @@ class AccessibilityNotificationService : AccessibilityService() {
   }
 
   override fun onDestroy() {
+    MonitoringHealthStore.markAccessibilityConnected(applicationContext, false)
     AppLogger.w(TAG, "accessibility notification fallback destroyed")
     PersistenceService.scheduleRestart(applicationContext)
     super.onDestroy()
