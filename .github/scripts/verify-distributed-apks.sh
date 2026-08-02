@@ -25,6 +25,8 @@ for apk in app/build/outputs/apk/*/debug/*.apk; do
   manifest="app/build/reports/apk-inspection/${name}.manifest.xml"
   grep -q 'io.github.jd1378.otphelper.PersistenceService' "$manifest"
   grep -q 'io.github.jd1378.otphelper.NotificationListener' "$manifest"
+  grep -q 'io.github.jd1378.otphelper.AccessibilityNotificationService' "$manifest"
+  grep -q 'android.permission.BIND_ACCESSIBILITY_SERVICE' "$manifest"
   grep -q 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE' "$manifest"
 
   if grep -Eqi 'leakcanary|LeakLauncherActivity|LeakActivity' "$manifest"; then
@@ -33,10 +35,6 @@ for apk in app/build/outputs/apk/*/debug/*.apk; do
   fi
   if grep -Eqi 'shizuku|moe\.shizuku|rikka\.shizuku' "$manifest"; then
     echo "Shizuku components or permissions must not be shipped in $apk" >&2
-    exit 1
-  fi
-  if grep -q 'io.github.jd1378.otphelper.AccessibilityNotificationService' "$manifest"; then
-    echo "Obsolete Accessibility notification reader is still packaged in $apk" >&2
     exit 1
   fi
   if grep -q 'io.github.jd1378.otphelper.fixture' "$manifest"; then
@@ -65,6 +63,22 @@ if main is None:
     raise SystemExit("MainActivity is missing from merged APK Manifest")
 if main.get(android + "excludeFromRecents") == "true":
     raise SystemExit("MainActivity is excluded from Recents")
+
+accessibility = next(
+    (
+        service
+        for service in application.findall("service")
+        if service.get(android + "name")
+        == "io.github.jd1378.otphelper.AccessibilityNotificationService"
+    ),
+    None,
+)
+if accessibility is None:
+    raise SystemExit("AccessibilityNotificationService is missing")
+if accessibility.get(android + "exported") != "true":
+    raise SystemExit("AccessibilityNotificationService must be exported for system binding")
+if accessibility.get(android + "permission") != "android.permission.BIND_ACCESSIBILITY_SERVICE":
+    raise SystemExit("AccessibilityNotificationService binding permission is incorrect")
 PY
 done
 
