@@ -166,9 +166,9 @@ class PersistenceService : Service() {
     val health = MonitoringHealthStore.snapshot(this)
     val status =
         when {
-          !permissionGranted -> R.string.persistence_notification_permission_missing
           health.listenerConnected -> R.string.persistence_notification_listener_ok
           health.accessibilityConnected -> R.string.persistence_notification_fallback_active
+          !permissionGranted -> R.string.persistence_notification_permission_missing
           else -> R.string.persistence_notification_listener_stalled
         }
 
