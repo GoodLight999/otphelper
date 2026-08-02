@@ -1,6 +1,5 @@
 package io.github.jd1378.otphelper.utils
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.ActivityManager
 import android.app.usage.UsageStatsManager
 import android.content.ComponentName
@@ -9,10 +8,8 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
-import android.view.accessibility.AccessibilityManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
-import io.github.jd1378.otphelper.AccessibilityNotificationService
 import io.github.jd1378.otphelper.BuildConfig
 import io.github.jd1378.otphelper.MainActivity
 import io.github.jd1378.otphelper.NotificationListener
@@ -24,7 +21,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
-import rikka.shizuku.Shizuku
 
 object DiagnosticsReportManager {
   fun build(context: Context, settings: UserSettings): String {
@@ -33,12 +29,11 @@ object DiagnosticsReportManager {
     val powerManager = appContext.getSystemService(PowerManager::class.java)
     val notificationManager = NotificationManagerCompat.from(appContext)
     val listenerPermission = NotificationListener.isNotificationListenerServiceEnabled(appContext)
-    val accessibilityPermission = isAccessibilityFallbackEnabled(appContext)
     val health = MonitoringHealthStore.snapshot(appContext)
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
     val watchdogStates = watchdogStates(appContext)
-    val shizukuState = shizukuState()
+    val shizuku = ShizukuConnectionManager.snapshot(appContext)
 
     return buildString {
       appendLine("OTP Helper diagnostics")
@@ -71,14 +66,19 @@ object DiagnosticsReportManager {
       appendLine("notificationListenerPermission=$listenerPermission")
       appendLine("notificationListenerActuallyConnected=${health.listenerConnected}")
       appendLine("notificationListenerConnectionChangedAt=${formatMillis(health.listenerChangedAt)}")
-      appendLine("accessibilityFallbackPermission=$accessibilityPermission")
-      appendLine("accessibilityFallbackActuallyConnected=${health.accessibilityConnected}")
-      appendLine("accessibilityConnectionChangedAt=${formatMillis(health.accessibilityChangedAt)}")
       appendLine("persistenceServiceRunning=$persistenceRunning")
       appendLine("ignoringBatteryOptimizations=${powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: "unknown"}")
       appendLine("watchdogWork=$watchdogStates")
       appendLine("autostartSettingsAvailable=${AutostartHelper.hasAutostartSettings(appContext)}")
-      appendLine("shizuku=$shizukuState")
+      appendLine()
+      appendLine("[shizuku]")
+      appendLine("managerPackage=${ShizukuConnectionManager.MANAGER_PACKAGE}")
+      appendLine("managerInstalled=${shizuku.managerInstalled}")
+      appendLine("binderAlive=${shizuku.binderAlive}")
+      appendLine("binderEverReceived=${shizuku.binderEverReceived}")
+      appendLine("serverVersion=${shizuku.serverVersion ?: "unknown"}")
+      appendLine("serverUid=${shizuku.serverUid ?: "unknown"}")
+      appendLine("permission=${shizuku.permission}")
       appendLine()
       appendLine("[automatic checks]")
       appendLine(check("App is visible in Recents", !excludedFromRecents))
@@ -92,13 +92,10 @@ object DiagnosticsReportManager {
           ))
       appendLine(
           when {
-            health.accessibilityConnected -> "PASS Accessibility fallback is actually connected"
-            accessibilityPermission -> "WARN Accessibility fallback is enabled but not connected"
-            else -> "INFO Accessibility fallback is optional and currently disabled"
+            !shizuku.managerInstalled -> "INFO Optional Shizuku Manager is not installed"
+            shizuku.binderAlive -> "PASS Optional Shizuku Binder is connected"
+            else -> "WARN Shizuku Manager is installed but its Binder is not connected"
           })
-      appendLine(
-          if (shizukuState.startsWith("available")) "INFO Optional Shizuku is available"
-          else "INFO Optional Shizuku is not active; normal monitoring does not depend on it")
       appendLine()
       appendLine("[recent redacted log]")
       val logs = AppLogger.readRecent(appContext)
@@ -126,17 +123,6 @@ object DiagnosticsReportManager {
       } else {
         "unsupported"
       }
-
-  private fun isAccessibilityFallbackEnabled(context: Context): Boolean {
-    val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false
-    return manager
-        .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        .any { info ->
-          val serviceInfo = info.resolveInfo?.serviceInfo
-          serviceInfo?.packageName == context.packageName &&
-              serviceInfo.name == AccessibilityNotificationService::class.java.name
-        }
-  }
 
   @Suppress("DEPRECATION")
   private fun isPersistenceServiceRunning(context: Context): Boolean {
@@ -179,17 +165,4 @@ object DiagnosticsReportManager {
       else -> manager.appStandbyBucket.toString()
     }
   }
-
-  private fun shizukuState(): String =
-      runCatching {
-            if (!Shizuku.pingBinder()) {
-              "inactive"
-            } else {
-              val permission =
-                  if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) "granted"
-                  else "not-granted"
-              "available(version=${Shizuku.getVersion()},permission=$permission)"
-            }
-          }
-          .getOrElse { "unavailable:${it.javaClass.simpleName}" }
 }
