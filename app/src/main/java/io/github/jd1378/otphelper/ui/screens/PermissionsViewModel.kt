@@ -13,6 +13,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jd1378.otphelper.AccessibilityNotificationService
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
@@ -35,6 +36,7 @@ import kotlinx.coroutines.withContext
 data class PermissionsUiState(
     val hasNotifPerm: Boolean = false,
     val hasNotifListenerPerm: Boolean = false,
+    val hasAccessibilityNotificationService: Boolean = false,
     val hasSmsListenerPerm: Boolean = false,
     val hasReadSmsPerm: Boolean = false,
     val isIgnoringBatteryOptimizations: Boolean = false,
@@ -56,6 +58,7 @@ constructor(
 
   private val _hasNotifPerm = MutableStateFlow(false)
   private val _hasNotifListenerPerm = MutableStateFlow(false)
+  private val _hasAccessibilityNotificationService = MutableStateFlow(false)
   private val _hasSmsListenerPerm = MutableStateFlow(false)
   private val _hasReadSmsPerm = MutableStateFlow(false)
   private val _isIgnoringBatteryOptimizations = MutableStateFlow(false)
@@ -68,6 +71,7 @@ constructor(
               userSettingsRepository.userSettings,
               _hasNotifPerm,
               _hasNotifListenerPerm,
+              _hasAccessibilityNotificationService,
               _hasSmsListenerPerm,
               _hasReadSmsPerm,
               _isIgnoringBatteryOptimizations,
@@ -78,6 +82,7 @@ constructor(
               userSettings,
               hasNotifPerm,
               hasNotifListenerPerm,
+              hasAccessibilityNotificationService,
               hasSmsListenerPerm,
               hasReadSmsPerm,
               isIgnoringBatteryOptimizations,
@@ -93,6 +98,7 @@ constructor(
             PermissionsUiState(
                 hasNotifPerm,
                 hasNotifListenerPerm,
+                hasAccessibilityNotificationService,
                 hasSmsListenerPerm,
                 hasReadSmsPerm,
                 isIgnoringBatteryOptimizations,
@@ -124,6 +130,11 @@ constructor(
         _hasNotifListenerPerm.update {
           NotificationManagerCompat.getEnabledListenerPackages(context)
               .contains(context.packageName)
+        }
+      }
+      launch {
+        _hasAccessibilityNotificationService.update {
+          AccessibilityNotificationService.isEnabled(context)
         }
       }
       launch {
@@ -169,6 +180,10 @@ constructor(
 
   fun onOpenReadNotificationsPressed(context: Context) {
     SettingsHelper.openNotificationListenerSettings(context)
+  }
+
+  fun onOpenAccessibilityPressed(context: Context) {
+    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
   }
 
   fun onOpenBatteryOptimizationsPressed(context: Context) {
