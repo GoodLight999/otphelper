@@ -43,23 +43,7 @@ object ShizukuRepairManager {
 
     val packageName = context.packageName
     val listener = ComponentName(context, NotificationListener::class.java).flattenToString()
-    val commands =
-        buildList {
-              add("cmd notification allow_listener ${shellQuote(listener)}")
-              add("cmd deviceidle whitelist +${shellQuote(packageName)}")
-              add(
-                  "cmd appops set --user current ${shellQuote(packageName)} " +
-                      "RUN_IN_BACKGROUND allow")
-              add(
-                  "cmd appops set --user current ${shellQuote(packageName)} " +
-                      "RUN_ANY_IN_BACKGROUND allow")
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                add(
-                    "cmd appops set --user current ${shellQuote(packageName)} " +
-                        "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
-              }
-            }
-            .toTypedArray()
+    val commands = buildRepairCommands(packageName, listener, Build.VERSION.SDK_INT)
 
     val args =
         Shizuku.UserServiceArgs(
@@ -111,6 +95,28 @@ object ShizukuRepairManager {
     PersistenceService.requestListenerRebind(context)
     return ShizukuRepairResult.SUCCESS
   }
+
+  internal fun buildRepairCommands(
+      packageName: String,
+      listenerComponent: String,
+      sdkInt: Int,
+  ): Array<String> =
+      buildList {
+            add("cmd notification allow_listener ${shellQuote(listenerComponent)}")
+            add("cmd deviceidle whitelist +${shellQuote(packageName)}")
+            add(
+                "cmd appops set --user current ${shellQuote(packageName)} " +
+                    "RUN_IN_BACKGROUND allow")
+            add(
+                "cmd appops set --user current ${shellQuote(packageName)} " +
+                    "RUN_ANY_IN_BACKGROUND allow")
+            if (sdkInt >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+              add(
+                  "cmd appops set --user current ${shellQuote(packageName)} " +
+                      "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
+            }
+          }
+          .toTypedArray()
 
   private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 }
