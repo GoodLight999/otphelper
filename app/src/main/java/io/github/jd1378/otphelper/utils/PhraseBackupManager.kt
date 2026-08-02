@@ -1,0 +1,117 @@
+package io.github.jd1378.otphelper.utils
+
+import android.content.Context
+import android.net.Uri
+import io.github.jd1378.otphelper.UserSettings
+import java.io.IOException
+import org.json.JSONArray
+import org.json.JSONObject
+
+enum class PhraseListKind(val wireName: String) {
+  SENSITIVE("sensitive_phrases"),
+  IGNORED("ignored_phrases"),
+  CLEANUP("cleanup_phrases");
+
+  companion object {
+    fun fromWireName(value: String?): PhraseListKind? = entries.firstOrNull { it.wireName == value }
+  }
+}
+
+data class PhraseLists(
+    val sensitive: List<String>,
+    val ignored: List<String>,
+    val cleanup: List<String>,
+)
+
+object PhraseBackupManager {
+  private const val SCHEMA = "otphelper.phrases"
+  private const val VERSION = 1
+  private const val MAX_FILE_CHARS = 2_000_000
+  private const val MAX_PHRASES_PER_LIST = 20_000
+  private const val MAX_PHRASE_CHARS = 20_000
+
+  fun readText(context: Context, uri: Uri): String {
+    val text =
+        context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+            ?: throw IOException("Unable to open import file")
+    require(text.length <= MAX_FILE_CHARS) { "The import file is too large" }
+    return text
+  }
+
+  fun writeText(context: Context, uri: Uri, text: String) {
+    context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use {
+      it.write(text)
+    } ?: throw IOException("Unable to open export file")
+  }
+
+  fun encodeSingle(kind: PhraseListKind, phrases: List<String>): String =
+      JSONObject()
+          .put("schema", SCHEMA)
+          .put("version", VERSION)
+          .put("kind", kind.wireName)
+          .put("phrases", JSONArray(normalize(phrases)))
+          .toString(2)
+
+  fun encodeAll(settings: UserSettings): String =
+      JSONObject()
+          .put("schema", SCHEMA)
+          .put("version", VERSION)
+          .put(
+              "lists",
+              JSONObject()
+                  .put(PhraseListKind.SENSITIVE.wireName, JSONArray(normalize(settings.sensitivePhrasesList)))
+                  .put(PhraseListKind.IGNORED.wireName, JSONArray(normalize(settings.ignoredPhrasesList)))
+                  .put(PhraseListKind.CLEANUP.wireName, JSONArray(normalize(settings.cleanupPhrasesList))),
+          )
+          .toString(2)
+
+  /**
+   * Imports the native JSON format, a JSON string array, or a UTF-8 text file with one phrase per
+   * line. The relaxed formats make it possible to recover lists from older manual backups.
+   */
+  fun decodeSingle(text: String, expectedKind: PhraseListKind): List<String> {
+    val trimmed = text.trim()
+    require(trimmed.isNotEmpty()) { "The import file is empty" }
+
+    if (trimmed.startsWith("[")) return normalize(jsonArrayToList(JSONArray(trimmed)))
+    if (!trimmed.startsWith("{")) return normalize(trimmed.lineSequence().toList())
+
+    val root = JSONObject(trimmed)
+    root.optJSONObject("lists")?.let { lists ->
+      return normalize(jsonArrayToList(lists.getJSONArray(expectedKind.wireName)))
+    }
+
+    val actualKind = PhraseListKind.fromWireName(root.optString("kind", null))
+    require(actualKind == null || actualKind == expectedKind) {
+      "This backup contains ${actualKind?.wireName}, not ${expectedKind.wireName}"
+    }
+    return normalize(jsonArrayToList(root.getJSONArray("phrases")))
+  }
+
+  fun decodeAll(text: String): PhraseLists {
+    val root = JSONObject(text.trim())
+    val lists = root.optJSONObject("lists") ?: throw IllegalArgumentException("Not a complete backup")
+    return PhraseLists(
+        sensitive = normalize(jsonArrayToList(lists.getJSONArray(PhraseListKind.SENSITIVE.wireName))),
+        ignored = normalize(jsonArrayToList(lists.getJSONArray(PhraseListKind.IGNORED.wireName))),
+        cleanup = normalize(jsonArrayToList(lists.getJSONArray(PhraseListKind.CLEANUP.wireName))),
+    )
+  }
+
+  private fun jsonArrayToList(array: JSONArray): List<String> =
+      buildList(array.length()) {
+        for (index in 0 until array.length()) add(array.getString(index))
+      }
+
+  private fun normalize(values: Iterable<String>): List<String> {
+    val result = LinkedHashSet<String>()
+    for (raw in values) {
+      val value = raw.trimEnd('\r', '\n')
+      if (value.isBlank()) continue
+      require(value.length <= MAX_PHRASE_CHARS) { "A phrase is too long" }
+      result += value
+      require(result.size <= MAX_PHRASES_PER_LIST) { "The backup contains too many phrases" }
+    }
+    return result.toList()
+  }
+}
