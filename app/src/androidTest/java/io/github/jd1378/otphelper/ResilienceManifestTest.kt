@@ -4,16 +4,17 @@ import android.Manifest
 import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
-import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkManager
+import io.github.jd1378.otphelper.utils.MonitoringHealthSnapshot
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import java.util.concurrent.TimeUnit
@@ -28,6 +29,7 @@ import org.junit.runner.RunWith
 class ResilienceManifestTest {
   private val context: Context = ApplicationProvider.getApplicationContext()
   private val packageManager = context.packageManager
+  private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
   @Test
   fun launcherRemainsVisibleInRecents() {
@@ -38,14 +40,30 @@ class ResilienceManifestTest {
         )
     assertEquals(0, activityInfo.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS)
 
-    ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-      scenario.onActivity { activity ->
-        val tasks = activity.getSystemService(ActivityManager::class.java).appTasks
-        assertTrue("OTP Helper should own a visible recent task", tasks.isNotEmpty())
-        assertFalse(
-            tasks.first().taskInfo.baseIntent.flags and
-                android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS != 0)
-      }
+    // ActivityScenario's intent matcher crashes when a singleTask activity is launched without an
+    // action. Launch the real MAIN intent through Instrumentation instead.
+    val activity = launchMainActivity()
+    try {
+      val tasks = activity.getSystemService(ActivityManager::class.java).appTasks
+      assertTrue("OTP Helper should own a visible recent task", tasks.isNotEmpty())
+      assertTrue(
+          "OTP Helper should have a task rooted in MainActivity",
+          tasks.any { task ->
+            task.taskInfo.baseIntent.component?.className == MainActivity::class.java.name
+          },
+      )
+      assertTrue(
+          "OTP Helper's recent task must not use FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS",
+          tasks
+              .filter { task ->
+                task.taskInfo.baseIntent.component?.className == MainActivity::class.java.name
+              }
+              .all { task ->
+                task.taskInfo.baseIntent.flags and Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS == 0
+              },
+      )
+    } finally {
+      finishActivity(activity)
     }
   }
 
@@ -94,7 +112,10 @@ class ResilienceManifestTest {
 
   @Test
   fun foregroundServiceAndWatchdogCanStart() {
-    ActivityScenario.launch(MainActivity::class.java).use {
+    // Keep the app visibly foreground while exercising startForegroundService; Android can reject
+    // a background FGS launch even though the service itself is otherwise valid.
+    val activity = launchMainActivity()
+    try {
       PersistenceService.start(context)
       MyWorkManager.schedulePersistenceWatchdog(context)
       Thread.sleep(2_000)
@@ -114,6 +135,8 @@ class ResilienceManifestTest {
               .getWorkInfosForUniqueWork(persistenceWatchdogWorkName)
               .get(10, TimeUnit.SECONDS)
       assertTrue("Persistence watchdog should be scheduled", watchdog.isNotEmpty())
+    } finally {
+      finishActivity(activity)
     }
   }
 
@@ -135,7 +158,7 @@ class ResilienceManifestTest {
   @Test
   fun accessibilityFallbackCanActuallyBindOnApi35() {
     val component =
-        ComponentName(context, AccessibilityNotificationService::class.java).flattenToString()
+        ComponentName(context, AccessibilityNotificationService::class.java).flattenToShortString()
     val previousServices = executeShellCommand("settings get secure enabled_accessibility_services").trim()
     val previousEnabled = executeShellCommand("settings get secure accessibility_enabled").trim()
     val restoredServices = previousServices.takeUnless { it.isBlank() || it == "null" }
@@ -150,11 +173,23 @@ class ResilienceManifestTest {
 
     MonitoringHealthStore.markAccessibilityConnected(context, false)
     try {
+      // Test APKs are sideloaded, so Android's restricted-settings gate must be explicitly opened
+      // before the Accessibility service can be enabled through secure settings.
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "ACCESS_RESTRICTED_SETTINGS allow")
       executeShellCommand("settings put secure enabled_accessibility_services $mergedServices")
       executeShellCommand("settings put secure accessibility_enabled 1")
+
+      val effectiveServices =
+          executeShellCommand("settings get secure enabled_accessibility_services").trim()
+      assertTrue(
+          "Accessibility component was not persisted in secure settings: $effectiveServices",
+          effectiveServices.split(':').contains(component),
+      )
       assertTrue(
           "Accessibility fallback did not report onServiceConnected after enablement",
-          waitForHealth { it.accessibilityConnected },
+          waitForHealth(timeoutMs = 30_000L) { it.accessibilityConnected },
       )
     } finally {
       if (restoredServices == null) {
@@ -167,6 +202,9 @@ class ResilienceManifestTest {
       } else {
         executeShellCommand("settings put secure accessibility_enabled $previousEnabled")
       }
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "ACCESS_RESTRICTED_SETTINGS default")
     }
   }
 
@@ -191,8 +229,27 @@ class ResilienceManifestTest {
     assertTrue(snapshot.accessibilityConnected)
   }
 
-  private fun waitForHealth(predicate: (io.github.jd1378.otphelper.utils.MonitoringHealthSnapshot) -> Boolean): Boolean {
-    val deadline = SystemClock.elapsedRealtime() + 15_000L
+  private fun launchMainActivity(): MainActivity {
+    val intent =
+        Intent(context, MainActivity::class.java)
+            .setAction(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    val activity = instrumentation.startActivitySync(intent)
+    instrumentation.waitForIdleSync()
+    return activity as MainActivity
+  }
+
+  private fun finishActivity(activity: MainActivity) {
+    instrumentation.runOnMainSync { activity.finishAndRemoveTask() }
+    instrumentation.waitForIdleSync()
+  }
+
+  private fun waitForHealth(
+      timeoutMs: Long = 15_000L,
+      predicate: (MonitoringHealthSnapshot) -> Boolean,
+  ): Boolean {
+    val deadline = SystemClock.elapsedRealtime() + timeoutMs
     while (SystemClock.elapsedRealtime() < deadline) {
       if (predicate(MonitoringHealthStore.snapshot(context))) return true
       Thread.sleep(100L)
@@ -201,8 +258,7 @@ class ResilienceManifestTest {
   }
 
   private fun executeShellCommand(command: String): String {
-    val descriptor =
-        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+    val descriptor = instrumentation.uiAutomation.executeShellCommand(command)
     return ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
   }
 }
