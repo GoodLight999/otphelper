@@ -24,7 +24,6 @@ import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.utils.NotificationHelper
 
 const val INTENT_ACTION_REPAIR_BACKGROUND = "INTENT_ACTION_REPAIR_BACKGROUND"
-const val INTENT_ACTION_SHIZUKU_REPAIR = "INTENT_ACTION_SHIZUKU_REPAIR"
 
 class PersistenceService : Service() {
   companion object {
