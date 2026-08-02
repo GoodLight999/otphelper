@@ -238,6 +238,36 @@ fun Permissions(
       if (uiState.modeOfOperation == ModeOfOperation.Notification &&
           Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
         Text(
+            stringResource(R.string.permission_shizuku_notification_desc),
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 15.sp,
+        )
+        val shizukuManager =
+            stringResource(
+                if (uiState.shizukuManagerInstalled) R.string.permission_shizuku_installed
+                else R.string.permission_shizuku_not_installed)
+        val shizukuBinder =
+            stringResource(
+                if (uiState.shizukuBinderAlive) R.string.permission_shizuku_connected
+                else R.string.permission_shizuku_not_connected)
+        Text(
+            stringResource(
+                R.string.permission_shizuku_status,
+                shizukuManager,
+                shizukuBinder,
+                uiState.shizukuPermission,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 15.sp,
+        )
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { viewModel.onRunShizukuRepair(context) },
+        ) {
+          Text(stringResource(R.string.permission_run_shizuku_repair))
+        }
+
+        Text(
             stringResource(R.string.read_notifs_android_15_desc),
             modifier = Modifier.fillMaxWidth(),
             fontSize = 15.sp)
