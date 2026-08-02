@@ -2,6 +2,7 @@ package io.github.jd1378.otphelper
 
 import android.Manifest
 import android.app.ActivityManager
+import android.app.UiAutomation
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -30,6 +31,9 @@ class ResilienceManifestTest {
   private val context: Context = ApplicationProvider.getApplicationContext()
   private val packageManager = context.packageManager
   private val instrumentation = InstrumentationRegistry.getInstrumentation()
+  private val nonSuppressingUiAutomation by lazy {
+    instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+  }
 
   @Test
   fun launcherRemainsVisibleInRecents() {
@@ -258,7 +262,7 @@ class ResilienceManifestTest {
   }
 
   private fun executeShellCommand(command: String): String {
-    val descriptor = instrumentation.uiAutomation.executeShellCommand(command)
+    val descriptor = nonSuppressingUiAutomation.executeShellCommand(command)
     return ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
   }
 }
