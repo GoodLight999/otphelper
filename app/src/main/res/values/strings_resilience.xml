@@ -34,7 +34,24 @@
   <string name="permission_todo_accessibility_notifications">Enable notification reading through Accessibility events</string>
   <string name="permission_accessibility_notification_desc">Optional second notification-reading path defined by Android's public Accessibility API. Android 16 still exposes TYPE_NOTIFICATION_STATE_CHANGED and its Notification parcelable. For a locked device, a non-public notification may be replaced with its public version. This service requests no window content, gestures, key events, or screenshots.</string>
 
-  <string name="diagnostics_desc">Generate a redacted diagnostic report containing current permissions, actual notification-listener and Accessibility notification-event connections, service state, watchdog state, device information and recent OTP Helper logs.</string>
+  <string name="permission_shizuku_notification_desc">Optional repair for Android 15 and later. Using the official Shizuku API, OTP Helper applies the RECEIVE_SENSITIVE_NOTIFICATIONS AppOp as shell/root and toggles notification-listener access so Android refreshes its trusted-listener cache. It is not required for Accessibility notification events or SMS mode.</string>
+  <string name="permission_shizuku_status">Shizuku: manager %1$s / Binder %2$s / permission %3$s</string>
+  <string name="permission_shizuku_installed">installed</string>
+  <string name="permission_shizuku_not_installed">not installed</string>
+  <string name="permission_shizuku_connected">connected</string>
+  <string name="permission_shizuku_not_connected">not connected</string>
+  <string name="permission_run_shizuku_repair">Apply Shizuku notification repair</string>
+  <string name="persistence_shizuku_applied_connected">The sensitive-notification AppOp was applied and the standard notification listener reconnected.</string>
+  <string name="persistence_shizuku_applied_pending">The sensitive-notification AppOp was applied, but listener reconnection is still pending.</string>
+  <string name="persistence_shizuku_manager_missing">Shizuku Manager is not installed.</string>
+  <string name="persistence_shizuku_service_not_running">Shizuku Manager is installed, but its service Binder was not received. Start Shizuku and retry.</string>
+  <string name="persistence_shizuku_unsupported">This Shizuku API version is unsupported. Version 11 or later is required.</string>
+  <string name="persistence_shizuku_insufficient_privilege">The Shizuku service is not running with shell or root identity.</string>
+  <string name="persistence_shizuku_permission_denied">OTP Helper does not have Shizuku permission.</string>
+  <string name="persistence_shizuku_permission_requested">A Shizuku permission request was sent. Approve it, then run the repair again.</string>
+  <string name="persistence_shizuku_failed">Shizuku notification repair failed: %1$s</string>
+
+  <string name="diagnostics_desc">Generate a redacted diagnostic report containing current permissions, actual notification-listener and Accessibility notification-event connections, Shizuku Manager/Binder state, service state, watchdog state, device information and recent OTP Helper logs.</string>
   <string name="copy_diagnostics">Copy diagnostic report</string>
   <string name="export_diagnostics">Export diagnostic report</string>
   <string name="diagnostics_copied">Diagnostic report copied.</string>
