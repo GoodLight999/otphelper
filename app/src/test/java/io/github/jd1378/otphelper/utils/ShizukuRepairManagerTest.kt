@@ -10,12 +10,13 @@ class ShizukuRepairManagerTest {
   private val listener = "$packageName/$packageName.NotificationListener"
 
   @Test
-  fun android14PlanDoesNotUseAndroid15SensitiveNotificationOp() {
+  fun android14PlanReconnectsListenerWithoutSensitiveNotificationOp() {
     val commands = ShizukuRepairManager.buildRepairCommands(packageName, listener, 34)
 
-    assertEquals(4, commands.size)
+    assertEquals(5, commands.size)
     assertFalse(commands.any { it.contains("RECEIVE_SENSITIVE_NOTIFICATIONS") })
-    assertTrue(commands.any { it == "cmd notification allow_listener '$listener'" })
+    assertEquals("cmd notification disallow_listener '$listener'", commands[3])
+    assertEquals("cmd notification allow_listener '$listener'", commands[4])
     assertTrue(commands.any { it == "cmd deviceidle whitelist +'$packageName'" })
     assertTrue(
         commands
@@ -24,16 +25,17 @@ class ShizukuRepairManagerTest {
   }
 
   @Test
-  fun android15PlanIncludesSensitiveNotificationOp() {
+  fun android15PlanAppliesSensitiveOpBeforeListenerReconnect() {
     val commands = ShizukuRepairManager.buildRepairCommands(packageName, listener, 35)
 
-    assertEquals(5, commands.size)
-    assertTrue(
-        commands.any {
-          it ==
-              "cmd appops set --user current '$packageName' " +
-                  "RECEIVE_SENSITIVE_NOTIFICATIONS allow"
-        })
+    assertEquals(6, commands.size)
+    assertEquals(
+        "cmd appops set --user current '$packageName' " +
+            "RECEIVE_SENSITIVE_NOTIFICATIONS allow",
+        commands[3],
+    )
+    assertEquals("cmd notification disallow_listener '$listener'", commands[4])
+    assertEquals("cmd notification allow_listener '$listener'", commands[5])
   }
 
   @Test
