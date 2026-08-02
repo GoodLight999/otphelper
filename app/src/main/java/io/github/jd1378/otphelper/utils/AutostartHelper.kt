@@ -9,18 +9,22 @@ class AutostartHelper {
   companion object {
     private val POWER_MANAGER_INTENTS =
         listOf(
-            // HONOR MagicOS (new package name). Keep several known activities because the exact
-            // component differs across MagicOS generations and regions.
+            // HONOR MagicOS. Activity names vary by generation and region.
             Intent()
                 .setComponent(
                     ComponentName(
                         "com.hihonor.systemmanager",
-                        "com.hihonor.systemmanager.optimize.process.ProtectActivity")),
+                        "com.hihonor.systemmanager.startupmgr.ui.StartupAppControlActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
                         "com.hihonor.systemmanager",
                         "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.optimize.process.ProtectActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
@@ -31,12 +35,17 @@ class AutostartHelper {
                 .setComponent(
                     ComponentName(
                         "com.huawei.systemmanager",
-                        "com.huawei.systemmanager.optimize.process.ProtectActivity")),
+                        "com.huawei.systemmanager.startupmgr.ui.StartupAppControlActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
                         "com.huawei.systemmanager",
                         "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.optimize.process.ProtectActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
@@ -83,19 +92,24 @@ class AutostartHelper {
                 .setData(Uri.parse("mobilemanager://function/entry/AutoStart")))
 
     fun openAutostartSettings(context: Context) {
-      for (intent in POWER_MANAGER_INTENTS) {
+      for (template in POWER_MANAGER_INTENTS) {
+        val intent = Intent(template).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (ActivityHelper.isCallable(context, intent)) {
           try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(intent)
             return
-          } catch (_: Throwable) {
-            // Try the next OEM component.
+          } catch (error: Throwable) {
+            AppLogger.w(
+                "AutostartHelper",
+                "Unable to open ${intent.component?.flattenToShortString()}: ${error.javaClass.simpleName}",
+            )
           }
         }
       }
+      AppLogger.w("AutostartHelper", "No callable OEM app-launch settings activity was found")
     }
 
     fun hasAutostartSettings(context: Context): Boolean =
-        POWER_MANAGER_INTENTS.any { ActivityHelper.isCallable(context, it) }
+        POWER_MANAGER_INTENTS.any { ActivityHelper.isCallable(context, Intent(it)) }
   }
 }
