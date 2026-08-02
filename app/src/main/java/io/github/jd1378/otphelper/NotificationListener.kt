@@ -23,7 +23,6 @@ import io.github.jd1378.otphelper.di.RecentDetectedCodesHolder
 import io.github.jd1378.otphelper.di.RecentDetectedMessageHolder
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
-import io.github.jd1378.otphelper.utils.NotificationIngestionSelfTest
 import io.github.jd1378.otphelper.worker.CodeDetectedWorker
 import javax.inject.Inject
 
@@ -146,19 +145,6 @@ class NotificationListener : NotificationListenerService() {
     AppLogger.d(TAG, "onNotificationPosted: pkg=${sbn.packageName}, id=${sbn.id}")
     val notification = sbn.notification
     val rawNotificationText = extractNotificationText(notification)
-
-    // This must run before mode checks and own-package filtering. It proves that a shell/Shizuku
-    // notification from another package delivered its actual body text.
-    if (
-        NotificationIngestionSelfTest.handlePostedNotification(
-            applicationContext,
-            sbn.packageName,
-            sbn.tag,
-            rawNotificationText,
-        )) {
-      cancelNotification(sbn.key)
-      return
-    }
 
     autoUpdatingListenerUtils.awaitCodeExtractor()
     if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification &&
