@@ -9,6 +9,34 @@ class AutostartHelper {
   companion object {
     private val POWER_MANAGER_INTENTS =
         listOf(
+            // HONOR MagicOS (new package name). Keep several known activities because the exact
+            // component differs across MagicOS generations and regions.
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.optimize.process.ProtectActivity")),
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.optimize.bootstart.BootStartActivity")),
+            // Huawei / older HONOR firmware.
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.optimize.process.ProtectActivity")),
+            Intent()
+                .setComponent(
+                    ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
@@ -19,11 +47,6 @@ class AutostartHelper {
                     ComponentName(
                         "com.letv.android.letvsafe",
                         "com.letv.android.letvsafe.AutobootManageActivity")),
-            Intent()
-                .setComponent(
-                    ComponentName(
-                        "com.huawei.systemmanager",
-                        "com.huawei.systemmanager.optimize.process.ProtectActivity")),
             Intent()
                 .setComponent(
                     ComponentName(
@@ -63,22 +86,16 @@ class AutostartHelper {
       for (intent in POWER_MANAGER_INTENTS) {
         if (ActivityHelper.isCallable(context, intent)) {
           try {
-            context.startActivity(intent)
-            break
-          } catch (e: Throwable) {
-            continue
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+          } catch (_: Throwable) {
+            // Try the next OEM component.
           }
         }
       }
     }
 
-    fun hasAutostartSettings(context: Context): Boolean {
-      for (intent in POWER_MANAGER_INTENTS) {
-        if (ActivityHelper.isCallable(context, intent)) {
-          return true
-        }
-      }
-      return false
-    }
+    fun hasAutostartSettings(context: Context): Boolean =
+        POWER_MANAGER_INTENTS.any { ActivityHelper.isCallable(context, it) }
   }
 }
