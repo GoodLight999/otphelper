@@ -14,6 +14,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jd1378.otphelper.AccessibilityNotificationService
+import io.github.jd1378.otphelper.INTENT_ACTION_SHIZUKU_REPAIR
+import io.github.jd1378.otphelper.MainActivity
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
@@ -21,6 +23,8 @@ import io.github.jd1378.otphelper.ui.navigation.MainDestinations
 import io.github.jd1378.otphelper.utils.AutostartHelper
 import io.github.jd1378.otphelper.utils.DiagnosticsReportManager
 import io.github.jd1378.otphelper.utils.SettingsHelper
+import io.github.jd1378.otphelper.utils.ShizukuConnectionManager
+import io.github.jd1378.otphelper.utils.ShizukuConnectionSnapshot
 import io.github.jd1378.otphelper.utils.combine
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +42,9 @@ data class PermissionsUiState(
     val hasNotifPerm: Boolean = false,
     val hasNotifListenerPerm: Boolean = false,
     val hasAccessibilityNotificationService: Boolean = false,
+    val shizukuManagerInstalled: Boolean = false,
+    val shizukuBinderAlive: Boolean = false,
+    val shizukuPermission: String = "unavailable",
     val hasSmsListenerPerm: Boolean = false,
     val hasReadSmsPerm: Boolean = false,
     val isIgnoringBatteryOptimizations: Boolean = false,
@@ -46,6 +53,12 @@ data class PermissionsUiState(
     val showSkipWarning: Boolean = false,
     val hasDoneAllSteps: Boolean = false,
     val modeOfOperation: ModeOfOperation = ModeOfOperation.UNRECOGNIZED,
+)
+
+private data class NotificationSupportState(
+    val listenerEnabled: Boolean,
+    val accessibilityEnabled: Boolean,
+    val shizuku: ShizukuConnectionSnapshot,
 )
 
 @Stable
@@ -60,9 +73,23 @@ constructor(
   private val _hasNotifPerm = MutableStateFlow(false)
   private val _hasNotifListenerPerm = MutableStateFlow(false)
   private val _hasAccessibilityNotificationService = MutableStateFlow(false)
-  private val notificationReadStates =
-      combine(_hasNotifListenerPerm, _hasAccessibilityNotificationService) { listener, accessibility ->
-        listener to accessibility
+  private val _shizukuSnapshot =
+      MutableStateFlow(
+          ShizukuConnectionSnapshot(
+              managerInstalled = false,
+              binderAlive = false,
+              binderEverReceived = false,
+              serverVersion = null,
+              serverUid = null,
+              permission = "unavailable",
+          ))
+  private val notificationSupportState =
+      combine(
+          _hasNotifListenerPerm,
+          _hasAccessibilityNotificationService,
+          _shizukuSnapshot,
+      ) { listener, accessibility, shizuku ->
+        NotificationSupportState(listener, accessibility, shizuku)
       }
   private val _hasSmsListenerPerm = MutableStateFlow(false)
   private val _hasReadSmsPerm = MutableStateFlow(false)
@@ -75,7 +102,7 @@ constructor(
       combine(
               userSettingsRepository.userSettings,
               _hasNotifPerm,
-              notificationReadStates,
+              notificationSupportState,
               _hasSmsListenerPerm,
               _hasReadSmsPerm,
               _isIgnoringBatteryOptimizations,
@@ -85,25 +112,26 @@ constructor(
           ) {
               userSettings,
               hasNotifPerm,
-              notificationReadStates,
+              support,
               hasSmsListenerPerm,
               hasReadSmsPerm,
               isIgnoringBatteryOptimizations,
               hasAutostartSettings,
               hasRestrictedSettings,
               showSkipWarning ->
-            val (hasNotifListenerPerm, hasAccessibilityNotificationService) =
-                notificationReadStates
             val hasDoneAllSteps =
                 when (userSettings.modeOfOperation) {
-                  ModeOfOperation.Notification -> hasNotifPerm && hasNotifListenerPerm
+                  ModeOfOperation.Notification -> hasNotifPerm && support.listenerEnabled
                   ModeOfOperation.SMS -> hasReadSmsPerm && hasSmsListenerPerm
                   else -> false
                 }
             PermissionsUiState(
                 hasNotifPerm,
-                hasNotifListenerPerm,
-                hasAccessibilityNotificationService,
+                support.listenerEnabled,
+                support.accessibilityEnabled,
+                support.shizuku.managerInstalled,
+                support.shizuku.binderAlive,
+                support.shizuku.permission,
                 hasSmsListenerPerm,
                 hasReadSmsPerm,
                 isIgnoringBatteryOptimizations,
@@ -142,6 +170,7 @@ constructor(
           AccessibilityNotificationService.isEnabled(context)
         }
       }
+      launch { _shizukuSnapshot.update { ShizukuConnectionManager.snapshot(context) } }
       launch {
         _hasSmsListenerPerm.update {
           context.checkSelfPermission(android.Manifest.permission.RECEIVE_SMS) ==
@@ -189,6 +218,14 @@ constructor(
 
   fun onOpenAccessibilityPressed(context: Context) {
     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+  }
+
+  fun onRunShizukuRepair(context: Context) {
+    context.startActivity(
+        Intent(context, MainActivity::class.java)
+            .setAction(INTENT_ACTION_SHIZUKU_REPAIR)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    )
   }
 
   fun onOpenBatteryOptimizationsPressed(context: Context) {
