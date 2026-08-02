@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import io.github.jd1378.otphelper.UserSettings
 import java.io.IOException
+import java.io.Reader
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -26,50 +27,73 @@ data class PhraseLists(
 object PhraseBackupManager {
   private const val SCHEMA = "otphelper.phrases"
   private const val VERSION = 1
-  private const val MAX_FILE_CHARS = 2_000_000
+  internal const val MAX_FILE_CHARS = 2_000_000
   private const val MAX_PHRASES_PER_LIST = 20_000
   private const val MAX_PHRASE_CHARS = 20_000
 
-  fun readText(context: Context, uri: Uri): String {
-    val text =
-        context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-            ?: throw IOException("Unable to open import file")
-    require(text.length <= MAX_FILE_CHARS) { "The import file is too large" }
-    return text
+  fun readText(context: Context, uri: Uri): String =
+      context.contentResolver.openInputStream(uri)?.reader(Charsets.UTF_8)?.use(::readBounded)
+          ?: throw IOException("Unable to open import file")
+
+  internal fun readBounded(reader: Reader): String {
+    val result = StringBuilder(minOf(MAX_FILE_CHARS, 16_384))
+    val buffer = CharArray(8_192)
+    while (true) {
+      val count = reader.read(buffer)
+      if (count < 0) break
+      require(result.length + count <= MAX_FILE_CHARS) { "The import file is too large" }
+      result.append(buffer, 0, count)
+    }
+    return result.toString()
   }
 
   fun writeText(context: Context, uri: Uri, text: String) {
+    require(text.length <= MAX_FILE_CHARS) { "The export file is too large" }
     context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use {
       it.write(text)
     } ?: throw IOException("Unable to open export file")
   }
 
   fun encodeSingle(kind: PhraseListKind, phrases: List<String>): String =
-      JSONObject()
-          .put("schema", SCHEMA)
-          .put("version", VERSION)
-          .put("kind", kind.wireName)
-          .put("phrases", JSONArray(normalize(phrases)))
-          .toString(2)
+      requireOutputSize(
+          JSONObject()
+              .put("schema", SCHEMA)
+              .put("version", VERSION)
+              .put("kind", kind.wireName)
+              .put("phrases", JSONArray(normalize(phrases)))
+              .toString(2)
+      )
 
   fun encodeAll(settings: UserSettings): String =
-      JSONObject()
-          .put("schema", SCHEMA)
-          .put("version", VERSION)
-          .put(
-              "lists",
-              JSONObject()
-                  .put(PhraseListKind.SENSITIVE.wireName, JSONArray(normalize(settings.sensitivePhrasesList)))
-                  .put(PhraseListKind.IGNORED.wireName, JSONArray(normalize(settings.ignoredPhrasesList)))
-                  .put(PhraseListKind.CLEANUP.wireName, JSONArray(normalize(settings.cleanupPhrasesList))),
-          )
-          .toString(2)
+      requireOutputSize(
+          JSONObject()
+              .put("schema", SCHEMA)
+              .put("version", VERSION)
+              .put(
+                  "lists",
+                  JSONObject()
+                      .put(
+                          PhraseListKind.SENSITIVE.wireName,
+                          JSONArray(normalize(settings.sensitivePhrasesList)),
+                      )
+                      .put(
+                          PhraseListKind.IGNORED.wireName,
+                          JSONArray(normalize(settings.ignoredPhrasesList)),
+                      )
+                      .put(
+                          PhraseListKind.CLEANUP.wireName,
+                          JSONArray(normalize(settings.cleanupPhrasesList)),
+                      ),
+              )
+              .toString(2)
+      )
 
   /**
    * Imports the native JSON format, a JSON string array, or a UTF-8 text file with one phrase per
    * line. The relaxed formats make it possible to recover lists from older manual backups.
    */
   fun decodeSingle(text: String, expectedKind: PhraseListKind): List<String> {
+    require(text.length <= MAX_FILE_CHARS) { "The import file is too large" }
     val trimmed = text.trim()
     require(trimmed.isNotEmpty()) { "The import file is empty" }
 
@@ -91,6 +115,7 @@ object PhraseBackupManager {
   }
 
   fun decodeAll(text: String): PhraseLists {
+    require(text.length <= MAX_FILE_CHARS) { "The import file is too large" }
     val trimmed = text.trim()
     require(trimmed.isNotEmpty()) { "The import file is empty" }
     val root = JSONObject(trimmed)
@@ -140,5 +165,10 @@ object PhraseBackupManager {
       require(result.size <= MAX_PHRASES_PER_LIST) { "The backup contains too many phrases" }
     }
     return result.toList()
+  }
+
+  private fun requireOutputSize(text: String): String {
+    require(text.length <= MAX_FILE_CHARS) { "The export file is too large" }
+    return text
   }
 }
