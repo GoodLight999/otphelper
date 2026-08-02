@@ -33,8 +33,8 @@ object ShizukuRepairManager {
         listOf(
             "cmd notification allow_listener ${shellQuote(listener)}",
             "cmd deviceidle whitelist +${shellQuote(packageName)}",
-            "cmd appops set ${shellQuote(packageName)} RUN_IN_BACKGROUND allow",
-            "cmd appops set ${shellQuote(packageName)} RUN_ANY_IN_BACKGROUND allow",
+            "cmd appops set --user current ${shellQuote(packageName)} RUN_IN_BACKGROUND allow",
+            "cmd appops set --user current ${shellQuote(packageName)} RUN_ANY_IN_BACKGROUND allow",
         )
     commands.forEach(::runCommand)
     PersistenceService.requestListenerRebind(context)
