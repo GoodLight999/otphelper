@@ -3,6 +3,7 @@ package io.github.jd1378.otphelper
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -15,8 +16,12 @@ import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.utils.ActivityHelper
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.SettingsHelper
+import io.github.jd1378.otphelper.utils.ShizukuRepairManager
+import io.github.jd1378.otphelper.utils.ShizukuRepairResult
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 const val INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS =
     "INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS"
@@ -52,29 +57,28 @@ class MainActivity : AppCompatActivity() {
               "cleanupPhrasesMigrated=${settings.isCleanupPhrasesMigrated}",
       )
 
-      // setup initial settings
       if (!settings.isMigrationDone) {
-        AppLogger.i("MainActivity", "starting data migration + history cleanup")
         doDataMigration(applicationContext)
         enableHistoryCleanup(applicationContext)
       } else if (!settings.isCleanupPhrasesMigrated) {
-        AppLogger.i("MainActivity", "starting cleanup-phrases migration")
         doCleanupPhrasesMigration(applicationContext)
       }
     }
 
+    PersistenceService.start(applicationContext)
+    MyWorkManager.schedulePersistenceWatchdog(applicationContext)
     setContent { OtpHelperApp(deepLinkHandler) }
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
+    setIntent(intent)
     handleIntent(intent)
   }
 
   override fun onStart() {
     super.onStart()
     handleIntent(intent)
-    // consume the deeplink
     intent = null
   }
 
@@ -83,7 +87,39 @@ class MainActivity : AppCompatActivity() {
     when (intent?.action) {
       INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS ->
           SettingsHelper.openNotificationListenerSettings(this)
+      INTENT_ACTION_REPAIR_BACKGROUND,
+      INTENT_ACTION_SHIZUKU_REPAIR -> runBackgroundRepair()
       else -> deepLinkHandler.handleDeepLink(intent)
+    }
+    if (intent?.action == INTENT_ACTION_REPAIR_BACKGROUND ||
+        intent?.action == INTENT_ACTION_SHIZUKU_REPAIR) {
+      intent.action = null
+    }
+  }
+
+  private fun runBackgroundRepair() {
+    PersistenceService.start(applicationContext)
+    MyWorkManager.schedulePersistenceWatchdog(applicationContext)
+    MyWorkManager.rebindListeners(applicationContext)
+
+    lifecycleScope.launch {
+      val message =
+          try {
+            when (withContext(Dispatchers.IO) { ShizukuRepairManager.repair(applicationContext) }) {
+              ShizukuRepairResult.SUCCESS -> getString(R.string.persistence_shizuku_success)
+              ShizukuRepairResult.UNAVAILABLE ->
+                  getString(R.string.persistence_shizuku_unavailable)
+              ShizukuRepairResult.PERMISSION_REQUESTED ->
+                  getString(R.string.persistence_shizuku_permission_requested)
+            }
+          } catch (error: Throwable) {
+            AppLogger.e("MainActivity", "Shizuku repair failed", error)
+            getString(
+                R.string.persistence_shizuku_failed,
+                error.message ?: error.javaClass.simpleName,
+            )
+          }
+      Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
     }
   }
 }
