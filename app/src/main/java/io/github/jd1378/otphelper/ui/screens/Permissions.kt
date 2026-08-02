@@ -43,6 +43,7 @@ import io.github.jd1378.otphelper.ui.components.TitleBar
 import io.github.jd1378.otphelper.ui.components.TodoItem
 import io.github.jd1378.otphelper.ui.components.verticalColumnScrollbar
 import io.github.jd1378.otphelper.utils.Clipboard
+import io.github.jd1378.otphelper.utils.NotificationIngestionSelfTest
 import kotlinx.coroutines.launch
 
 @Composable
@@ -59,6 +60,7 @@ fun Permissions(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var diagnosticsBusy by remember { mutableStateOf(false) }
+  var notificationSelfTestBusy by remember { mutableStateOf(false) }
   val permLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         viewModel.updatePermissionsStatus(context)
@@ -90,9 +92,7 @@ fun Permissions(
   LaunchedEffect(lifecycleState) {
     when (lifecycleState) {
       Lifecycle.State.STARTED,
-      Lifecycle.State.RESUMED -> {
-        viewModel.updatePermissionsStatus(context)
-      }
+      Lifecycle.State.RESUMED -> viewModel.updatePermissionsStatus(context)
       else -> {}
     }
   }
@@ -216,6 +216,55 @@ fun Permissions(
           modifier = Modifier.fillMaxWidth(),
           fontSize = 15.sp,
       )
+
+      Text(
+          stringResource(R.string.notification_self_test_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      if (!uiState.hasNotifPerm || !uiState.hasNotifListenerPerm) {
+        Text(
+            stringResource(R.string.notification_self_test_prerequisite),
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 15.sp,
+        )
+      }
+      OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          enabled =
+              !notificationSelfTestBusy && uiState.hasNotifPerm && uiState.hasNotifListenerPerm,
+          onClick = {
+            scope.launch {
+              notificationSelfTestBusy = true
+              val message =
+                  runCatching { viewModel.runNotificationReadSelfTest(context) }
+                      .fold(
+                          onSuccess = { result ->
+                            when (result) {
+                              NotificationIngestionSelfTest.State.PASSED ->
+                                  context.getString(R.string.notification_self_test_passed)
+                              NotificationIngestionSelfTest.State.FAILED ->
+                                  context.getString(R.string.notification_self_test_failed)
+                              NotificationIngestionSelfTest.State.TIMED_OUT,
+                              NotificationIngestionSelfTest.State.PENDING,
+                              NotificationIngestionSelfTest.State.IDLE ->
+                                  context.getString(R.string.notification_self_test_timeout)
+                            }
+                          },
+                          onFailure = { error ->
+                            context.getString(
+                                R.string.diagnostics_failed,
+                                error.message ?: error.javaClass.simpleName,
+                            )
+                          },
+                      )
+              notificationSelfTestBusy = false
+              Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+          },
+      ) {
+        Text(stringResource(R.string.notification_self_test_run))
+      }
 
       Text(
           stringResource(R.string.diagnostics_desc),
