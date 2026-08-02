@@ -22,30 +22,27 @@
   <string name="persistence_notification_listener_ok">Notification listener is connected</string>
   <string name="persistence_notification_permission_missing">Notification access is disabled; tap Repair</string>
   <string name="persistence_notification_listener_stalled">Permission is enabled, but the listener is disconnected; tap Repair</string>
-  <string name="persistence_notification_fallback_active">Main listener is disconnected; Accessibility fallback is connected</string>
   <string name="persistence_open_app">Open app</string>
   <string name="persistence_repair">Repair</string>
-  <string name="persistence_accessibility">Fallback access</string>
   <string name="persistence_repair_started">Standard background repair was requested.</string>
-  <string name="persistence_shizuku_unavailable">Optional Shizuku is not running. Standard repair has still been requested.</string>
-  <string name="persistence_shizuku_unsupported">This Shizuku version does not support the optional repair service. Standard repair has still been requested.</string>
+  <string name="persistence_shizuku_manager_missing">Shizuku Manager is not installed.</string>
+  <string name="persistence_shizuku_service_not_running">Shizuku Manager is installed, but its Binder service was not received. Start Shizuku and try again.</string>
+  <string name="persistence_shizuku_unsupported">This Shizuku API version does not support the optional repair service. Standard repair has still been requested.</string>
+  <string name="persistence_shizuku_permission_denied">Shizuku permission was denied. Allow OTP Helper in Shizuku Manager, then try again.</string>
   <string name="persistence_shizuku_permission_requested">Approve the optional Shizuku permission, then run its repair again.</string>
   <string name="persistence_shizuku_success">Optional Shizuku repair completed.</string>
   <string name="persistence_shizuku_failed">Optional Shizuku repair failed: %1$s</string>
 
-  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The notification-only Accessibility fallback, foreground service and watchdog are the primary resilience paths.</string>
+  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, listener rebind heartbeat, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
-  <string name="permission_todo_accessibility_fallback">Enable the notification-only Accessibility fallback</string>
-  <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption, background AppOps and—on Android 15 or later—the sensitive-notification AppOp used by the existing ADB procedure. OTP Helper does not require Shizuku for normal operation.</string>
+  <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption, background AppOps and—on Android 15 or later—the sensitive-notification AppOp used by the existing ADB procedure. OTP Helper does not require Shizuku for normal operation. Shizuku Binder detection is asynchronous and uses the official Provider/listener lifecycle.</string>
   <string name="permission_todo_shizuku_repair">Run optional Shizuku repair</string>
   <string name="run_repair">Run repair</string>
 
-  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, actual listener connections, service state, watchdog state, device information and recent OTP Helper logs.</string>
+  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, actual notification-listener connection, service state, watchdog state, Shizuku Binder state, device information and recent OTP Helper logs.</string>
   <string name="copy_diagnostics">Copy diagnostic report</string>
   <string name="export_diagnostics">Export diagnostic report</string>
   <string name="diagnostics_copied">Diagnostic report copied.</string>
   <string name="diagnostics_exported">Diagnostic report exported.</string>
   <string name="diagnostics_failed">Could not generate diagnostics: %1$s</string>
-
-  <string name="accessibility_service_description">Optional fallback that reads notification-change events when the standard notification listener is disconnected by the device.</string>
 </resources>
