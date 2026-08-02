@@ -88,7 +88,6 @@ dependencies {
   androidTestImplementation("androidx.compose.ui:ui-test-junit4")
   debugImplementation("androidx.compose.ui:ui-tooling")
   debugImplementation("androidx.compose.ui:ui-test-manifest")
-  debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 
   implementation("androidx.navigation:navigation-compose:2.9.5")
 
