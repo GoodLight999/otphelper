@@ -1,6 +1,5 @@
 package io.github.jd1378.otphelper.worker
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import androidx.hilt.work.HiltWorker
@@ -9,7 +8,6 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.jd1378.otphelper.ModeOfOperation
-import io.github.jd1378.otphelper.NotificationListener
 import io.github.jd1378.otphelper.NotificationListener.Companion.isNotificationListenerServiceEnabled
 import io.github.jd1378.otphelper.PersistenceService
 import io.github.jd1378.otphelper.SmsListener
@@ -61,15 +59,8 @@ constructor(
     }
 
     if (isNotificationListenerServiceEnabled(applicationContext)) {
-      try {
-        NotificationListener.enable(applicationContext)
-        NotificationListener.requestRebind(
-            ComponentName(applicationContext, NotificationListener::class.java))
-        AppLogger.i(TAG, "notification listener rebind requested")
-      } catch (error: Throwable) {
-        AppLogger.e(TAG, "Failed to request NotificationListener rebind", error)
-        return Result.retry()
-      }
+      PersistenceService.requestListenerRebind(applicationContext)
+      AppLogger.i(TAG, "notification listener rebind requested")
     } else if (!silent) {
       NotificationHelper.sendPermissionRevokedNotif(applicationContext)
     }
