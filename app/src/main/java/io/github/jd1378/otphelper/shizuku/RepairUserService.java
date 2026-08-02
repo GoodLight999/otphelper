@@ -37,7 +37,7 @@ public final class RepairUserService extends IRepairService.Stub {
 
     List<String> summaries = new ArrayList<>();
     for (String command : commands) {
-      if (command == null || command.isBlank()) continue;
+      if (command == null || command.trim().isEmpty()) continue;
       summaries.add(runCommand(command));
     }
     return String.join("\n", summaries);
@@ -64,7 +64,7 @@ public final class RepairUserService extends IRepairService.Stub {
         throw new RemoteException(
             "Repair command failed (" + exitCode + "): " + command + "\n" + output);
       }
-      return command + " => ok" + (output.isBlank() ? "" : " (" + output + ")");
+      return command + " => ok" + (output.trim().isEmpty() ? "" : " (" + output + ")");
     } catch (IOException e) {
       RemoteException remoteException = new RemoteException("Unable to run repair command: " + command);
       remoteException.initCause(e);
