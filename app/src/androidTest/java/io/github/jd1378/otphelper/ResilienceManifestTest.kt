@@ -11,6 +11,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.work.WorkManager
+import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
@@ -111,5 +112,26 @@ class ResilienceManifestTest {
               .get(10, TimeUnit.SECONDS)
       assertTrue("Persistence watchdog should be scheduled", watchdog.isNotEmpty())
     }
+  }
+
+  @Test
+  fun monitoringHealthDistinguishesPermissionFromActualConnection() {
+    MonitoringHealthStore.markProcessStarted(context)
+    var snapshot = MonitoringHealthStore.snapshot(context)
+    assertFalse(snapshot.listenerConnected)
+    assertFalse(snapshot.accessibilityConnected)
+
+    MonitoringHealthStore.markListenerConnected(context, true)
+    MonitoringHealthStore.markAccessibilityConnected(context, true)
+    snapshot = MonitoringHealthStore.snapshot(context)
+    assertTrue(snapshot.listenerConnected)
+    assertTrue(snapshot.accessibilityConnected)
+    assertTrue(snapshot.listenerChangedAt > 0L)
+    assertTrue(snapshot.accessibilityChangedAt > 0L)
+
+    MonitoringHealthStore.markListenerConnected(context, false)
+    snapshot = MonitoringHealthStore.snapshot(context)
+    assertFalse(snapshot.listenerConnected)
+    assertTrue(snapshot.accessibilityConnected)
   }
 }
