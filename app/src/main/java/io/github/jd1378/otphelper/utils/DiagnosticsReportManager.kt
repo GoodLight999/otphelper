@@ -30,6 +30,7 @@ object DiagnosticsReportManager {
     val notificationManager = NotificationManagerCompat.from(appContext)
     val listenerPermission = NotificationListener.isNotificationListenerServiceEnabled(appContext)
     val health = MonitoringHealthStore.snapshot(appContext)
+    val selfTest = NotificationIngestionSelfTest.snapshot(appContext)
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
     val watchdogStates = watchdogStates(appContext)
@@ -66,6 +67,8 @@ object DiagnosticsReportManager {
       appendLine("notificationListenerPermission=$listenerPermission")
       appendLine("notificationListenerActuallyConnected=${health.listenerConnected}")
       appendLine("notificationListenerConnectionChangedAt=${formatMillis(health.listenerChangedAt)}")
+      appendLine("notificationBodySelfTest=${selfTest.state}")
+      appendLine("notificationBodySelfTestStartedAt=${formatMillis(selfTest.startedAt)}")
       appendLine("persistenceServiceRunning=$persistenceRunning")
       appendLine("ignoringBatteryOptimizations=${powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: "unknown"}")
       appendLine("watchdogWork=$watchdogStates")
@@ -84,6 +87,14 @@ object DiagnosticsReportManager {
       appendLine(check("App is visible in Recents", !excludedFromRecents))
       appendLine(check("Notification access permission is enabled", listenerPermission))
       appendLine(check("Notification listener is actually connected", health.listenerConnected))
+      appendLine(
+          when (selfTest.state) {
+            NotificationIngestionSelfTest.State.PASSED ->
+                "PASS Actual notification body is readable"
+            NotificationIngestionSelfTest.State.IDLE ->
+                "INFO Actual notification-body self-test has not been run"
+            else -> "WARN Actual notification-body self-test state=${selfTest.state}"
+          })
       appendLine(check("Foreground persistence service is running", persistenceRunning))
       appendLine(
           check(
