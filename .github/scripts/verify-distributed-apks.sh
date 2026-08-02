@@ -26,15 +26,12 @@ for apk in app/build/outputs/apk/*/debug/*.apk; do
   grep -q 'io.github.jd1378.otphelper.PersistenceService' "$manifest"
   grep -q 'io.github.jd1378.otphelper.NotificationListener' "$manifest"
   grep -q 'io.github.jd1378.otphelper.AccessibilityNotificationService' "$manifest"
+  grep -q 'rikka.shizuku.ShizukuProvider' "$manifest"
   grep -q 'android.permission.BIND_ACCESSIBILITY_SERVICE' "$manifest"
   grep -q 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE' "$manifest"
 
   if grep -Eqi 'leakcanary|LeakLauncherActivity|LeakActivity' "$manifest"; then
     echo "LeakCanary components must not be shipped in $apk" >&2
-    exit 1
-  fi
-  if grep -Eqi 'shizuku|moe\.shizuku|rikka\.shizuku' "$manifest"; then
-    echo "Shizuku components or permissions must not be shipped in $apk" >&2
     exit 1
   fi
   if grep -q 'io.github.jd1378.otphelper.fixture' "$manifest"; then
@@ -79,6 +76,23 @@ if accessibility.get(android + "exported") != "true":
     raise SystemExit("AccessibilityNotificationService must be exported for system binding")
 if accessibility.get(android + "permission") != "android.permission.BIND_ACCESSIBILITY_SERVICE":
     raise SystemExit("AccessibilityNotificationService binding permission is incorrect")
+
+shizuku = next(
+    (
+        provider
+        for provider in application.findall("provider")
+        if provider.get(android + "name") == "rikka.shizuku.ShizukuProvider"
+    ),
+    None,
+)
+if shizuku is None:
+    raise SystemExit("Official ShizukuProvider is missing")
+if shizuku.get(android + "exported") != "true":
+    raise SystemExit("ShizukuProvider must be exported for Binder delivery")
+if shizuku.get(android + "permission") != "android.permission.INTERACT_ACROSS_USERS_FULL":
+    raise SystemExit("ShizukuProvider protection permission is incorrect")
+if shizuku.get(android + "authorities") != "io.github.jd1378.otphelper.shizuku":
+    raise SystemExit("ShizukuProvider authority is incorrect")
 PY
 done
 
