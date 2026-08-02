@@ -159,7 +159,11 @@ jobs:
 
   emulator-smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [35, 36]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -184,10 +188,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run API 35 resilience instrumentation tests
+      - name: Run resilience and cross-package OTP body tests
         uses: reactivecircus/android-emulator-runner@v2.37.0
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -201,7 +205,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-emulator-reports
+          name: android-emulator-reports-api-${{ matrix.api-level }}
           path: |
             app/build/reports/androidTests
             app/build/outputs/androidTest-results
