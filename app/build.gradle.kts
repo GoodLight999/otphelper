@@ -165,7 +165,6 @@ class ApplicationVariantAction : Action<ApplicationVariant> {
         val versionCode = variant.versionCode * 1000 + abiVersionCode
         output.versionCodeOverride = versionCode
 
-        val flavor = variant.flavorName
         val builtType = variant.buildType.name
         val versionName = variant.versionName
         val architecture = abi ?: "-universal"
@@ -184,9 +183,16 @@ androidComponents {
       val protoTask = tasks.getByName("generate${capName}Proto")
       val kspTask = tasks.getByName("ksp${capName}Kotlin")
       kspTask.dependsOn(protoTask)
+
       val testProtoTask = tasks.getByName("generate${capName}UnitTestProto")
       val testKspTask = tasks.getByName("ksp${capName}UnitTestKotlin")
       testKspTask.dependsOn(testProtoTask)
+
+      val androidTestProtoTask = tasks.findByName("generate${capName}AndroidTestProto")
+      val androidTestKspTask = tasks.findByName("ksp${capName}AndroidTestKotlin")
+      if (androidTestProtoTask != null && androidTestKspTask != null) {
+        androidTestKspTask.dependsOn(androidTestProtoTask)
+      }
     }
   }
 }
