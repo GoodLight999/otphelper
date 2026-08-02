@@ -53,6 +53,7 @@ fun Permissions(
     setupMode: Boolean = false
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val shizuku by viewModel.shizukuSnapshot.collectAsStateWithLifecycle()
   val lifecycleOwner = LocalLifecycleOwner.current
   val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
   val context = LocalContext.current
@@ -215,14 +216,6 @@ fun Permissions(
           modifier = Modifier.fillMaxWidth(),
           fontSize = 15.sp,
       )
-      TodoItem(
-          text = stringResource(R.string.permission_todo_accessibility_fallback),
-          actionText = stringResource(R.string.open_settings),
-          intermediate = true,
-          checked = true,
-      ) {
-        viewModel.onOpenAccessibilityPressed(context)
-      }
 
       Text(
           stringResource(R.string.diagnostics_desc),
@@ -264,6 +257,23 @@ fun Permissions(
 
       Text(
           stringResource(R.string.permission_shizuku_optional_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      Text(
+          text =
+              when {
+                !shizuku.managerInstalled ->
+                    stringResource(R.string.permission_shizuku_status_missing)
+                shizuku.binderAlive ->
+                    stringResource(
+                        R.string.permission_shizuku_status_connected,
+                        shizuku.serverVersion ?: -1,
+                        shizuku.serverUid ?: -1,
+                        shizuku.permission,
+                    )
+                else -> stringResource(R.string.permission_shizuku_status_disconnected)
+              },
           modifier = Modifier.fillMaxWidth(),
           fontSize = 15.sp,
       )
