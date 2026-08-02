@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import io.github.jd1378.otphelper.utils.AppLogger
+import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.utils.NotificationHelper.Companion.createNotificationChannels
 import javax.inject.Inject
 
@@ -18,6 +19,7 @@ class App : Application(), Configuration.Provider {
   override fun onCreate() {
     super.onCreate()
     AppLogger.initialize(applicationContext)
+    MonitoringHealthStore.markProcessStarted(applicationContext)
     AppLogger.i(
         "App",
         "onCreate: app process started, versionName=${BuildConfig.VERSION_NAME}, " +
