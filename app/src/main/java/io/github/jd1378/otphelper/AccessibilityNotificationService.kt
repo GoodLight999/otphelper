@@ -32,8 +32,11 @@ class AccessibilityNotificationService : AccessibilityService() {
     if (event?.eventType != AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) return
     if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification) return
 
+    // A surviving AccessibilityService can revive the foreground monitor after an OEM kill.
+    PersistenceService.start(applicationContext)
+
     val packageName = event.packageName?.toString()?.takeIf { it.isNotBlank() } ?: return
-    if (packageName == packageNameForSelf()) return
+    if (packageName == applicationContext.packageName) return
 
     val notification = event.parcelableData as? Notification
     if (notification != null) {
@@ -55,13 +58,18 @@ class AccessibilityNotificationService : AccessibilityService() {
 
     val stableId = signature.hashCode().toUInt().toString()
     val data =
-        workDataOf(
-            "packageName" to packageName,
-            "notificationId" to stableId,
-            "notificationTag" to "accessibility-fallback",
-            "text" to cleaned,
-            "code" to code,
-        )
+        try {
+          workDataOf(
+              "packageName" to packageName,
+              "notificationId" to stableId,
+              "notificationTag" to "accessibility-fallback",
+              "text" to cleaned,
+              "code" to code,
+          )
+        } catch (error: Throwable) {
+          AppLogger.e(TAG, "Accessibility notification was too large to enqueue", error)
+          return
+        }
     WorkManager.getInstance(applicationContext)
         .enqueue(OneTimeWorkRequestBuilder<CodeDetectedWorker>().setInputData(data).build())
     AppLogger.i(TAG, "code detected through accessibility fallback, pkg=$packageName")
@@ -95,8 +103,6 @@ class AccessibilityNotificationService : AccessibilityService() {
     }
     return result.toString()
   }
-
-  private fun packageNameForSelf(): String = applicationContext.packageName
 
   companion object {
     private const val TAG = "AccessibilityNotif"
