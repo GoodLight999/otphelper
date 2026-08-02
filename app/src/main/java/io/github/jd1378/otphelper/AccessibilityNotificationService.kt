@@ -43,10 +43,14 @@ class AccessibilityNotificationService : AccessibilityService() {
     if (event?.eventType != AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) return
     if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification) return
 
+    val notification = event.parcelableData as? Notification
+    val isNotificationEvent =
+        notification != null || event.className?.toString() == Notification::class.java.name
+    if (!isNotificationEvent) return
+
     val packageName = event.packageName?.toString()?.takeIf { it.isNotBlank() } ?: return
     if (packageName == applicationContext.packageName) return
 
-    val notification = event.parcelableData as? Notification
     if (notification != null) {
       val isForegroundService =
           notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0
