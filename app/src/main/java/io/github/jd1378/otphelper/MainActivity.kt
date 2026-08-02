@@ -87,8 +87,8 @@ class MainActivity : AppCompatActivity() {
     when (intent?.action) {
       INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS ->
           SettingsHelper.openNotificationListenerSettings(this)
-      INTENT_ACTION_REPAIR_BACKGROUND,
-      INTENT_ACTION_SHIZUKU_REPAIR -> runBackgroundRepair()
+      INTENT_ACTION_REPAIR_BACKGROUND -> runStandardBackgroundRepair(showConfirmation = true)
+      INTENT_ACTION_SHIZUKU_REPAIR -> runOptionalShizukuRepair()
       else -> deepLinkHandler.handleDeepLink(intent)
     }
     if (intent?.action == INTENT_ACTION_REPAIR_BACKGROUND ||
@@ -97,12 +97,18 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
-  private fun runBackgroundRepair() {
-    // These standard recovery operations always run. Shizuku remains an optional final step.
+  private fun runStandardBackgroundRepair(showConfirmation: Boolean) {
     PersistenceService.start(applicationContext)
     MyWorkManager.schedulePersistenceWatchdog(applicationContext)
     MyWorkManager.rebindListeners(applicationContext)
+    if (showConfirmation) {
+      Toast.makeText(this, R.string.persistence_repair_started, Toast.LENGTH_LONG).show()
+    }
+  }
 
+  private fun runOptionalShizukuRepair() {
+    // Standard recovery is always attempted first. Shizuku is only an optional extra.
+    runStandardBackgroundRepair(showConfirmation = false)
     lifecycleScope.launch {
       val message =
           try {
