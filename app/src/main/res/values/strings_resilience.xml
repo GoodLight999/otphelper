@@ -24,16 +24,26 @@
   <string name="persistence_open_app">Open app</string>
   <string name="persistence_repair">Repair</string>
   <string name="persistence_accessibility">Fallback access</string>
-  <string name="persistence_repair_started">Repair request sent.</string>
-  <string name="persistence_shizuku_unavailable">Shizuku is not running. Start Shizuku, then tap Repair again.</string>
-  <string name="persistence_shizuku_permission_requested">Approve the Shizuku permission, then tap Repair again.</string>
-  <string name="persistence_shizuku_success">Shizuku repair completed.</string>
-  <string name="persistence_shizuku_failed">Shizuku repair failed: %1$s</string>
+  <string name="persistence_repair_started">Standard background repair was requested.</string>
+  <string name="persistence_shizuku_unavailable">Optional Shizuku is not running. Standard repair has still been requested.</string>
+  <string name="persistence_shizuku_unsupported">This Shizuku version does not support the optional repair service. Standard repair has still been requested.</string>
+  <string name="persistence_shizuku_permission_requested">Approve the optional Shizuku permission, then run its repair again.</string>
+  <string name="persistence_shizuku_success">Optional Shizuku repair completed.</string>
+  <string name="persistence_shizuku_failed">Optional Shizuku repair failed: %1$s</string>
 
-  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The Accessibility fallback is limited to notification-change events. Shizuku Repair is optional and reapplies notification access, Doze exemption, and background AppOps.</string>
+  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The notification-only Accessibility fallback, foreground service and watchdog are the primary resilience paths.</string>
+  <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
   <string name="permission_todo_accessibility_fallback">Enable the notification-only Accessibility fallback</string>
-  <string name="permission_todo_shizuku_repair">Run the optional Shizuku background repair</string>
+  <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption and background AppOps. OTP Helper does not require Shizuku for normal operation.</string>
+  <string name="permission_todo_shizuku_repair">Run optional Shizuku repair</string>
   <string name="run_repair">Run repair</string>
+
+  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, service state, watchdog state, device information and recent OTP Helper logs.</string>
+  <string name="copy_diagnostics">Copy diagnostic report</string>
+  <string name="export_diagnostics">Export diagnostic report</string>
+  <string name="diagnostics_copied">Diagnostic report copied.</string>
+  <string name="diagnostics_exported">Diagnostic report exported.</string>
+  <string name="diagnostics_failed">Could not generate diagnostics: %1$s</string>
 
   <string name="accessibility_service_description">Optional fallback that reads notification-change events when the standard notification listener is disconnected by the device.</string>
 </resources>
