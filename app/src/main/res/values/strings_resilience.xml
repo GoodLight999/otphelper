@@ -19,8 +19,10 @@
   <string name="persistence_channel_name">OTP Helper background monitoring</string>
   <string name="persistence_channel_description">Keeps notification code detection available and reports its health.</string>
   <string name="persistence_notification_title">OTP Helper is monitoring notifications</string>
-  <string name="persistence_notification_listener_ok">Notification access connected</string>
-  <string name="persistence_notification_listener_waiting">Waiting for notification access; tap to repair</string>
+  <string name="persistence_notification_listener_ok">Notification listener is connected</string>
+  <string name="persistence_notification_permission_missing">Notification access is disabled; tap Repair</string>
+  <string name="persistence_notification_listener_stalled">Permission is enabled, but the listener is disconnected; tap Repair</string>
+  <string name="persistence_notification_fallback_active">Main listener is disconnected; Accessibility fallback is connected</string>
   <string name="persistence_open_app">Open app</string>
   <string name="persistence_repair">Repair</string>
   <string name="persistence_accessibility">Fallback access</string>
@@ -38,7 +40,7 @@
   <string name="permission_todo_shizuku_repair">Run optional Shizuku repair</string>
   <string name="run_repair">Run repair</string>
 
-  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, service state, watchdog state, device information and recent OTP Helper logs.</string>
+  <string name="diagnostics_desc">Generate a redacted diagnostic report containing the current permissions, actual listener connections, service state, watchdog state, device information and recent OTP Helper logs.</string>
   <string name="copy_diagnostics">Copy diagnostic report</string>
   <string name="export_diagnostics">Export diagnostic report</string>
   <string name="diagnostics_copied">Diagnostic report copied.</string>
