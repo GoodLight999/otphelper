@@ -214,6 +214,27 @@ fun Permissions(
           fontSize = 15.sp,
       )
 
+      if (uiState.modeOfOperation == ModeOfOperation.Notification) {
+        Text(
+            stringResource(R.string.permission_accessibility_notification_desc),
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 15.sp,
+        )
+        TodoItem(
+            text = stringResource(R.string.permission_todo_accessibility_notifications),
+            actionText = stringResource(R.string.open_settings),
+            intermediate = !uiState.hasAccessibilityNotificationService,
+            checked = uiState.hasAccessibilityNotificationService,
+            checkboxSemantics = {
+              stateDescription =
+                  if (uiState.hasAccessibilityNotificationService) permissionGranted
+                  else permissionNotGranted
+            },
+        ) {
+          viewModel.onOpenAccessibilityPressed(context)
+        }
+      }
+
       if (uiState.modeOfOperation == ModeOfOperation.Notification &&
           Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
         Text(
