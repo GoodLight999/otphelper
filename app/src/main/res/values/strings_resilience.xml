@@ -36,7 +36,7 @@
   <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The notification-only Accessibility fallback, foreground service and watchdog are the primary resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
   <string name="permission_todo_accessibility_fallback">Enable the notification-only Accessibility fallback</string>
-  <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption and background AppOps. OTP Helper does not require Shizuku for normal operation.</string>
+  <string name="permission_shizuku_optional_desc">Advanced optional repair: Shizuku can reapply notification access, Doze exemption, background AppOps and—on Android 15 or later—the sensitive-notification AppOp used by the existing ADB procedure. OTP Helper does not require Shizuku for normal operation.</string>
   <string name="permission_todo_shizuku_repair">Run optional Shizuku repair</string>
   <string name="run_repair">Run repair</string>
 
