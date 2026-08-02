@@ -3,11 +3,11 @@ package io.github.jd1378.otphelper.repository
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.UserSettings
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 
 class UserSettingsRepositoryMock : UserSettingsRepository {
   override val userSettings: Flow<UserSettings>
-    get() = flow { UserSettings.getDefaultInstance() }
+    get() = flowOf(UserSettings.getDefaultInstance())
 
   override suspend fun fetchSettings(): UserSettings {
     TODO("Not yet implemented")
@@ -54,6 +54,14 @@ class UserSettingsRepositoryMock : UserSettingsRepository {
   }
 
   override suspend fun setCleanupPhrases(list: List<String>) {
+    TODO("Not yet implemented")
+  }
+
+  override suspend fun setPhraseLists(
+      sensitive: List<String>,
+      ignored: List<String>,
+      cleanup: List<String>,
+  ) {
     TODO("Not yet implemented")
   }
 
