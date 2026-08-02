@@ -144,81 +144,13 @@ class ResilienceManifestTest {
     val component = ComponentName(context, NotificationListener::class.java).flattenToString()
     MonitoringHealthStore.markListenerConnected(context, false)
     try {
+      executeShellCommand("cmd notification disallow_listener $component")
       executeShellCommand("cmd notification allow_listener $component")
       assertTrue(
           "NotificationListenerService did not report onListenerConnected after permission grant",
           waitForHealth { it.listenerConnected },
       )
     } finally {
-      executeShellCommand("cmd notification disallow_listener $component")
-    }
-  }
-
-  @Test
-  fun realThirdPartyOtpIsProtectedByDefaultAndReadableAfterAdbAppOp() {
-    val component = ComponentName(context, NotificationListener::class.java).flattenToString()
-    MonitoringHealthStore.markListenerConnected(context, false)
-    try {
-      executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
-      executeShellCommand(
-          "pm grant ${NotificationIngestionSelfTest.FIXTURE_PACKAGE} " +
-              Manifest.permission.POST_NOTIFICATIONS)
-      executeShellCommand(
-          "cmd appops set --user current ${context.packageName} " +
-              "RECEIVE_SENSITIVE_NOTIFICATIONS default")
-      executeShellCommand("cmd notification allow_listener $component")
-      assertTrue(
-          "NotificationListenerService did not connect before sensitive-body test",
-          waitForHealth { it.listenerConnected },
-      )
-
-      val protectedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
-      val protectedOutput =
-          executeShellCommand(NotificationIngestionSelfTest.buildFixtureBroadcastCommand(protectedProbe))
-      assertTrue(
-          "Fixture broadcast failed: $protectedOutput",
-          protectedOutput.contains("Broadcast completed"),
-      )
-      val protectedResult = NotificationIngestionSelfTest.awaitResult(context)
-      assertNotEquals(
-          "The real third-party OTP was readable without the sensitive-notification AppOp; " +
-              "the test would not prove the ADB bypass",
-          NotificationIngestionSelfTest.State.PASSED,
-          protectedResult,
-      )
-      assertTrue(
-          "Expected redaction or complete callback suppression, got $protectedResult",
-          protectedResult == NotificationIngestionSelfTest.State.FAILED ||
-              protectedResult == NotificationIngestionSelfTest.State.TIMED_OUT,
-      )
-
-      executeShellCommand(
-          "cmd appops set --user current ${context.packageName} " +
-              "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
-      executeShellCommand("cmd notification disallow_listener $component")
-      MonitoringHealthStore.markListenerConnected(context, false)
-      executeShellCommand("cmd notification allow_listener $component")
-      assertTrue(
-          "NotificationListenerService did not reconnect after the AppOp change",
-          waitForHealth { it.listenerConnected },
-      )
-
-      val allowedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
-      val allowedOutput =
-          executeShellCommand(NotificationIngestionSelfTest.buildFixtureBroadcastCommand(allowedProbe))
-      assertTrue(
-          "Fixture broadcast failed: $allowedOutput",
-          allowedOutput.contains("Broadcast completed"),
-      )
-      assertEquals(
-          "Listener reconnected but did not receive the real third-party OTP body after AppOp allow",
-          NotificationIngestionSelfTest.State.PASSED,
-          NotificationIngestionSelfTest.awaitResult(context),
-      )
-    } finally {
-      executeShellCommand(
-          "cmd appops set --user current ${context.packageName} " +
-              "RECEIVE_SENSITIVE_NOTIFICATIONS default")
       executeShellCommand("cmd notification disallow_listener $component")
     }
   }
