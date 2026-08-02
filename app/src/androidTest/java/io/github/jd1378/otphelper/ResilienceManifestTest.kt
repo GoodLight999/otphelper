@@ -16,6 +16,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkManager
 import io.github.jd1378.otphelper.utils.MonitoringHealthSnapshot
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
+import io.github.jd1378.otphelper.utils.NotificationIngestionSelfTest
+import io.github.jd1378.otphelper.utils.ShizukuRepairManager
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
@@ -140,7 +142,7 @@ class ResilienceManifestTest {
   }
 
   @Test
-  fun notificationListenerCanActuallyBindOnApi35() {
+  fun notificationListenerCanActuallyBind() {
     val component = ComponentName(context, NotificationListener::class.java).flattenToString()
     MonitoringHealthStore.markListenerConnected(context, false)
     try {
@@ -150,6 +152,37 @@ class ResilienceManifestTest {
           waitForHealth { it.listenerConnected },
       )
     } finally {
+      executeShellCommand("cmd notification disallow_listener $component")
+    }
+  }
+
+  @Test
+  fun externalShellOtpBodyIsReadableWithSensitiveNotificationAppOp() {
+    val component = ComponentName(context, NotificationListener::class.java).flattenToString()
+    MonitoringHealthStore.markListenerConnected(context, false)
+    try {
+      executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
+      executeShellCommand("cmd notification allow_listener $component")
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
+      assertTrue(
+          "NotificationListenerService did not connect before external-body test",
+          waitForHealth { it.listenerConnected },
+      )
+
+      val probe = NotificationIngestionSelfTest.prepareExternalProbe(context)
+      val output = executeShellCommand(ShizukuRepairManager.buildProbeCommand(probe))
+      assertTrue("Shell notification command did not post: $output", output.contains("posting:"))
+      assertEquals(
+          "Listener connected but did not receive the real cross-package OTP body",
+          NotificationIngestionSelfTest.State.PASSED,
+          NotificationIngestionSelfTest.awaitResult(context),
+      )
+    } finally {
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "RECEIVE_SENSITIVE_NOTIFICATIONS default")
       executeShellCommand("cmd notification disallow_listener $component")
     }
   }
