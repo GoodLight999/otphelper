@@ -34,7 +34,7 @@
   <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐通知、復旧監視、通知専用のユーザー補助代替経路が主要な常駐対策です。</string>
   <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にしてください。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
   <string name="permission_todo_accessibility_fallback">通知専用のユーザー補助代替経路を有効にする</string>
-  <string name="permission_shizuku_optional_desc">高度な任意機能です。Shizukuを使うと、通知アクセス、Doze除外、バックグラウンドAppOpsを再設定できます。通常動作にShizukuは不要です。</string>
+  <string name="permission_shizuku_optional_desc">高度な任意機能です。Shizukuを使うと、通知アクセス、Doze除外、バックグラウンドAppOpsに加え、Android 15以降では既存ADB手順と同じ秘匿通知AppOpも再設定できます。通常動作にShizukuは不要です。</string>
   <string name="permission_todo_shizuku_repair">任意のShizuku修復を実行</string>
   <string name="run_repair">修復を実行</string>
 
