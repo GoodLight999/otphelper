@@ -95,7 +95,10 @@ class ResilienceManifestTest {
     assertTrue(shizukuProvider.exported)
     assertFalse(shizukuProvider.multiprocess)
     assertEquals("${context.packageName}.shizuku", shizukuProvider.authority)
-    assertEquals(Manifest.permission.INTERACT_ACROSS_USERS_FULL, shizukuProvider.readPermission)
+    assertEquals(
+        "android.permission.INTERACT_ACROSS_USERS_FULL",
+        shizukuProvider.readPermission,
+    )
     assertNotNull(shizukuProvider.applicationInfo)
 
     val bootReceiver =
