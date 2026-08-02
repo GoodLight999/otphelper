@@ -30,5 +30,10 @@
   <string name="persistence_shizuku_success">Shizuku repair completed.</string>
   <string name="persistence_shizuku_failed">Shizuku repair failed: %1$s</string>
 
+  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The Accessibility fallback is limited to notification-change events. Shizuku Repair is optional and reapplies notification access, Doze exemption, and background AppOps.</string>
+  <string name="permission_todo_accessibility_fallback">Enable the notification-only Accessibility fallback</string>
+  <string name="permission_todo_shizuku_repair">Run the optional Shizuku background repair</string>
+  <string name="run_repair">Run repair</string>
+
   <string name="accessibility_service_description">Optional fallback that reads notification-change events when the standard notification listener is disconnected by the device.</string>
 </resources>
