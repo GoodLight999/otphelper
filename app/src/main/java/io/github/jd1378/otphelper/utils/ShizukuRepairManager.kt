@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -43,12 +44,22 @@ object ShizukuRepairManager {
     val packageName = context.packageName
     val listener = ComponentName(context, NotificationListener::class.java).flattenToString()
     val commands =
-        arrayOf(
-            "cmd notification allow_listener ${shellQuote(listener)}",
-            "cmd deviceidle whitelist +${shellQuote(packageName)}",
-            "cmd appops set --user current ${shellQuote(packageName)} RUN_IN_BACKGROUND allow",
-            "cmd appops set --user current ${shellQuote(packageName)} RUN_ANY_IN_BACKGROUND allow",
-        )
+        buildList {
+              add("cmd notification allow_listener ${shellQuote(listener)}")
+              add("cmd deviceidle whitelist +${shellQuote(packageName)}")
+              add(
+                  "cmd appops set --user current ${shellQuote(packageName)} " +
+                      "RUN_IN_BACKGROUND allow")
+              add(
+                  "cmd appops set --user current ${shellQuote(packageName)} " +
+                      "RUN_ANY_IN_BACKGROUND allow")
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                add(
+                    "cmd appops set --user current ${shellQuote(packageName)} " +
+                        "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
+              }
+            }
+            .toTypedArray()
 
     val args =
         Shizuku.UserServiceArgs(
