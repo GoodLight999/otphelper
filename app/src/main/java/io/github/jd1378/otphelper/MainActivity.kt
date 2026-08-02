@@ -107,7 +107,8 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun runOptionalShizukuRepair() {
-    // Standard recovery is always attempted first. Shizuku is only an optional extra.
+    // Standard recovery is always attempted first. Shizuku is only retained if the post-repair
+    // notification-body self-test succeeds.
     runStandardBackgroundRepair(showConfirmation = false)
     lifecycleScope.launch {
       val message =
@@ -124,6 +125,12 @@ class MainActivity : AppCompatActivity() {
                   getString(R.string.persistence_shizuku_permission_denied)
               ShizukuRepairResult.PERMISSION_REQUESTED ->
                   getString(R.string.persistence_shizuku_permission_requested)
+              ShizukuRepairResult.NOTIFICATION_PERMISSION_MISSING ->
+                  getString(R.string.persistence_shizuku_notification_permission_missing)
+              ShizukuRepairResult.NOTIFICATION_LISTENER_NOT_CONNECTED ->
+                  getString(R.string.persistence_shizuku_listener_not_connected)
+              ShizukuRepairResult.NOTIFICATION_TEXT_UNREADABLE ->
+                  getString(R.string.persistence_shizuku_notification_unreadable)
             }
           } catch (error: Throwable) {
             AppLogger.e("MainActivity", "Shizuku repair failed", error)
