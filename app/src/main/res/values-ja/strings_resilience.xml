@@ -34,6 +34,9 @@
   <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、Listener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
   <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にしてください。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
   <string name="permission_shizuku_optional_desc">高度な任意機能です。Shizukuを使うと、通知アクセス、Doze除外、バックグラウンドAppOpsに加え、Android 15以降では既存ADB手順と同じ秘匿通知AppOpも再設定できます。通常動作にShizukuは不要です。Shizukuの検知は公式Providerと非同期Binder Listenerで行います。</string>
+  <string name="permission_shizuku_status_missing">Shizuku状態：Manager未インストール</string>
+  <string name="permission_shizuku_status_disconnected">Shizuku状態：Manager検出済み、Binderサービス未接続</string>
+  <string name="permission_shizuku_status_connected">Shizuku状態：Binder接続済み（API %1$d、UID %2$d、権限 %3$s）</string>
   <string name="permission_todo_shizuku_repair">任意のShizuku修復を実行</string>
   <string name="run_repair">修復を実行</string>
 
