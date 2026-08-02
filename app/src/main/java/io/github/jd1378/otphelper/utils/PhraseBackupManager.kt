@@ -77,31 +77,57 @@ object PhraseBackupManager {
     if (!trimmed.startsWith("{")) return normalize(trimmed.lineSequence().toList())
 
     val root = JSONObject(trimmed)
+    validateOptionalHeader(root)
     root.optJSONObject("lists")?.let { lists ->
-      return normalize(jsonArrayToList(lists.getJSONArray(expectedKind.wireName)))
+      return normalize(jsonArrayToList(requireArray(lists, expectedKind.wireName)))
     }
 
     val actualKind =
         if (root.has("kind")) PhraseListKind.fromWireName(root.optString("kind")) else null
     require(actualKind == null || actualKind == expectedKind) {
-      "This backup contains ${actualKind?.wireName}, not ${expectedKind.wireName}"
+      "This backup contains ${actualKind?.wireName ?: "an unknown list"}, not ${expectedKind.wireName}"
     }
-    return normalize(jsonArrayToList(root.getJSONArray("phrases")))
+    return normalize(jsonArrayToList(requireArray(root, "phrases")))
   }
 
   fun decodeAll(text: String): PhraseLists {
-    val root = JSONObject(text.trim())
+    val trimmed = text.trim()
+    require(trimmed.isNotEmpty()) { "The import file is empty" }
+    val root = JSONObject(trimmed)
+    validateRequiredHeader(root)
     val lists = root.optJSONObject("lists") ?: throw IllegalArgumentException("Not a complete backup")
     return PhraseLists(
-        sensitive = normalize(jsonArrayToList(lists.getJSONArray(PhraseListKind.SENSITIVE.wireName))),
-        ignored = normalize(jsonArrayToList(lists.getJSONArray(PhraseListKind.IGNORED.wireName))),
-        cleanup = normalize(jsonArrayToList(lists.getJSONArray(PhraseListKind.CLEANUP.wireName))),
+        sensitive = normalize(jsonArrayToList(requireArray(lists, PhraseListKind.SENSITIVE.wireName))),
+        ignored = normalize(jsonArrayToList(requireArray(lists, PhraseListKind.IGNORED.wireName))),
+        cleanup = normalize(jsonArrayToList(requireArray(lists, PhraseListKind.CLEANUP.wireName))),
     )
   }
 
+  private fun validateOptionalHeader(root: JSONObject) {
+    if (root.has("schema")) {
+      require(root.optString("schema") == SCHEMA) { "Unsupported backup schema" }
+    }
+    if (root.has("version")) {
+      require(root.optInt("version", -1) == VERSION) { "Unsupported backup version" }
+    }
+  }
+
+  private fun validateRequiredHeader(root: JSONObject) {
+    require(root.optString("schema") == SCHEMA) { "Not an OTP Helper phrase backup" }
+    require(root.optInt("version", -1) == VERSION) { "Unsupported backup version" }
+  }
+
+  private fun requireArray(objectValue: JSONObject, key: String): JSONArray =
+      objectValue.optJSONArray(key)
+          ?: throw IllegalArgumentException("Backup field '$key' is missing or is not a string array")
+
   private fun jsonArrayToList(array: JSONArray): List<String> =
       buildList(array.length()) {
-        for (index in 0 until array.length()) add(array.getString(index))
+        for (index in 0 until array.length()) {
+          val value = array.get(index)
+          require(value is String) { "Every phrase must be a string" }
+          add(value)
+        }
       }
 
   private fun normalize(values: Iterable<String>): List<String> {
