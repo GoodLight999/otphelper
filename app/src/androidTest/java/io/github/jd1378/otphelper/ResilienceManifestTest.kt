@@ -160,25 +160,38 @@ class ResilienceManifestTest {
   }
 
   @Test
-  fun externalShellOtpBodyIsReadableWithSensitiveNotificationAppOp() {
+  fun sensitiveOtpBodyIsRedactedByDefaultAndReadableAfterAppOp() {
     val component = ComponentName(context, NotificationListener::class.java).flattenToString()
     MonitoringHealthStore.markListenerConnected(context, false)
     try {
       executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
       executeShellCommand("cmd notification allow_listener $component")
-      executeShellCommand(
-          "cmd appops set --user current ${context.packageName} " +
-              "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
       assertTrue(
-          "NotificationListenerService did not connect before external-body test",
+          "NotificationListenerService did not connect before sensitive-body test",
           waitForHealth { it.listenerConnected },
       )
 
-      val probe = NotificationIngestionSelfTest.prepareExternalProbe(context)
-      val output = executeShellCommand(ShizukuRepairManager.buildProbeCommand(probe))
-      assertTrue("Shell notification command did not post: $output", output.contains("posting:"))
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "RECEIVE_SENSITIVE_NOTIFICATIONS default")
+      val redactedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
+      val redactedOutput = executeShellCommand(ShizukuRepairManager.buildProbeCommand(redactedProbe))
+      assertTrue("Shell notification command did not post: $redactedOutput", redactedOutput.contains("posting"))
       assertEquals(
-          "Listener connected but did not receive the real cross-package OTP body",
+          "The external OTP probe was readable without the sensitive-notification AppOp; " +
+              "this test would not prove the bypass",
+          NotificationIngestionSelfTest.State.FAILED,
+          NotificationIngestionSelfTest.awaitResult(context),
+      )
+
+      executeShellCommand(
+          "cmd appops set --user current ${context.packageName} " +
+              "RECEIVE_SENSITIVE_NOTIFICATIONS allow")
+      val allowedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
+      val allowedOutput = executeShellCommand(ShizukuRepairManager.buildProbeCommand(allowedProbe))
+      assertTrue("Shell notification command did not post: $allowedOutput", allowedOutput.contains("posting"))
+      assertEquals(
+          "Listener connected but did not receive the real cross-package OTP body after AppOp allow",
           NotificationIngestionSelfTest.State.PASSED,
           NotificationIngestionSelfTest.awaitResult(context),
       )
