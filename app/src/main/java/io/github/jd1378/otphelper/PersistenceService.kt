@@ -102,8 +102,8 @@ class PersistenceService : Service() {
 
   private fun repairListenerConnection() {
     if (!NotificationListener.isNotificationListenerServiceEnabled(this)) return
-    if (NotificationListener.isConnected) return
     try {
+      // requestRebind is idempotent. Repeating it is safer than trusting OEM process state.
       NotificationListener.requestRebind(ComponentName(this, NotificationListener::class.java))
       AppLogger.i(TAG, "notification listener rebind requested")
     } catch (error: Throwable) {
@@ -153,8 +153,9 @@ class PersistenceService : Service() {
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    val listenerGranted = NotificationListener.isNotificationListenerServiceEnabled(this)
     val status =
-        if (NotificationListener.isConnected) R.string.persistence_notification_listener_ok
+        if (listenerGranted) R.string.persistence_notification_listener_ok
         else R.string.persistence_notification_listener_waiting
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
