@@ -30,26 +30,20 @@
   <string name="persistence_shizuku_permission_requested">Shizuku権限を許可してから、もう一度Shizuku修復を実行してください。</string>
   <string name="persistence_shizuku_notification_permission_missing">Shizuku設定は適用されましたが、検証用通知を投稿できません。先にOTP Helperの通知権限を許可してください。</string>
   <string name="persistence_shizuku_listener_not_connected">Shizuku設定は適用されましたが、通知Listenerが接続しませんでした。</string>
-  <string name="persistence_shizuku_notification_unreadable">Shizuku設定は適用されましたが、検証通知の本文からコードを読めませんでした。この端末ではShizukuが有効な通知読取り経路になっていません。</string>
-  <string name="persistence_shizuku_success">Shizuku修復が完了し、実際の通知本文読取りテストにも成功しました。</string>
+  <string name="persistence_shizuku_notification_unreadable">Shizuku設定は適用されましたが、外部検証通知の本文からコードを読めませんでした。この端末ではShizukuが有効な通知読取り経路になっていません。</string>
+  <string name="persistence_shizuku_success">Shizuku修復が完了し、外部通知の本文読取りテストにも成功しました。</string>
   <string name="persistence_shizuku_failed">Shizuku修復に失敗しました：%1$s</string>
 
   <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、Listener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
   <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にしてください。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
-  <string name="notification_self_test_desc">一時的な6桁コード通知を投稿し、NotificationListenerが接続しただけでなく、実際の本文まで読めたかを検査します。</string>
-  <string name="notification_self_test_run">実際の通知本文読取りをテスト</string>
-  <string name="notification_self_test_passed">成功：6桁コードを含む通知本文を実際に読み取れました。</string>
-  <string name="notification_self_test_failed">失敗：通知イベントは届きましたが、本文のコードが欠落または秘匿されていました。</string>
-  <string name="notification_self_test_timeout">失敗：制限時間内に検証通知を受信できませんでした。</string>
-  <string name="notification_self_test_prerequisite">先に通知権限と通知へのアクセスを有効にしてください。</string>
-  <string name="permission_shizuku_optional_desc">任意の修復手段です。Shizukuは通知アクセスと、Android 15以降の秘匿通知AppOpを再設定します。ただし実際の通知本文テストに成功した場合だけ有効と判断します。Binder検知は公式Providerと非同期Listenerで行います。</string>
+  <string name="permission_shizuku_optional_desc">任意の修復手段です。Shizukuは通知アクセスと、Android 15以降の秘匿通知AppOpを再設定します。ただし、shellが別パッケージとして投稿したランダムな6桁コードを実際の通知本文から読めた場合だけ有効と判断します。Binder検知は公式Providerと非同期Listenerで行います。</string>
   <string name="permission_shizuku_status_missing">Shizuku状態：Manager未インストール</string>
   <string name="permission_shizuku_status_disconnected">Shizuku状態：Manager検出済み、Binderサービス未接続</string>
   <string name="permission_shizuku_status_connected">Shizuku状態：Binder接続済み（API %1$d、UID %2$d、権限 %3$s）</string>
   <string name="permission_todo_shizuku_repair">Shizukuで修復して実読取りを検証</string>
   <string name="run_repair">修復を実行</string>
 
-  <string name="diagnostics_desc">権限だけでなく実際の通知Listener接続状態、通知本文自己テスト、常駐サービス、復旧監視、Shizuku Binder状態、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
+  <string name="diagnostics_desc">権限だけでなく実際の通知Listener接続状態、直近の外部通知本文テスト、常駐サービス、復旧監視、Shizuku Binder状態、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
   <string name="copy_diagnostics">診断レポートをコピー</string>
   <string name="export_diagnostics">診断レポートをエクスポート</string>
   <string name="diagnostics_copied">診断レポートをコピーしました。</string>
