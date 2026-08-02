@@ -39,7 +39,13 @@ run_test() {
   local class_name="$1"
   local log_name="$2"
   local log_file="$REPORT_DIR/$log_name.log"
+
+  # Some emulator/API combinations return a non-zero shell status even when AndroidJUnitRunner
+  # reports OK. Capture the complete output and use the runner's result as the source of truth.
+  set +e
   adb shell am instrument -w -r -e class "$class_name" "$RUNNER" | tee "$log_file"
+  set -e
+
   if grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|INSTRUMENTATION_ABORTED|Process crashed' "$log_file"; then
     return 1
   fi
