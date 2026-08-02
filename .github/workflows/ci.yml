@@ -110,6 +110,7 @@ jobs:
           name: android-emulator-reports-api-${{ matrix.api-level }}
           path: |
             app/build/reports/androidTests
+            app/build/reports/manual-instrumentation
             app/build/outputs/androidTest-results
           if-no-files-found: ignore
           retention-days: 30
