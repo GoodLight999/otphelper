@@ -11,11 +11,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 
 /**
- * Short-lived Shizuku UserService used only for the optional repair action.
+ * Short-lived Shizuku UserService used only for the optional repair and external notification-body
+ * verification action.
  *
- * <p>The normal notification listener, accessibility fallback, foreground service and watchdog do
- * not depend on this process. It is deliberately non-daemon and is destroyed immediately after the
- * commands finish.
+ * <p>The normal notification listener, foreground service and watchdog do not depend on this
+ * process. It is deliberately non-daemon and is destroyed immediately after the commands finish.
  */
 @Keep
 public final class RepairUserService extends IRepairService.Stub {
