@@ -20,15 +20,18 @@ import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.ui.navigation.MainDestinations
 import io.github.jd1378.otphelper.utils.AutostartHelper
+import io.github.jd1378.otphelper.utils.DiagnosticsReportManager
 import io.github.jd1378.otphelper.utils.SettingsHelper
 import io.github.jd1378.otphelper.utils.combine
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Immutable
 data class PermissionsUiState(
@@ -186,6 +189,11 @@ constructor(
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
     )
   }
+
+  suspend fun buildDiagnostics(context: Context): String =
+      withContext(Dispatchers.IO) {
+        DiagnosticsReportManager.build(context, userSettingsRepository.fetchSettings())
+      }
 
   fun onOpenAutostartPressed(context: Context) {
     AutostartHelper.openAutostartSettings(context)
