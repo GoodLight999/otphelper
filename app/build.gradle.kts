@@ -27,10 +27,42 @@ android {
     vectorDrawables { useSupportLibrary = true }
   }
 
+  val fixedKeystorePath = providers.environmentVariable("OTPHELPER_KEYSTORE_PATH").orNull
+  val fixedKeystorePassword =
+      providers.environmentVariable("OTPHELPER_KEYSTORE_PASSWORD").orNull
+  val fixedKeyAlias = providers.environmentVariable("OTPHELPER_KEY_ALIAS").orNull
+  val fixedKeyPassword = providers.environmentVariable("OTPHELPER_KEY_PASSWORD").orNull
+  val hasCompleteFixedSigningConfig =
+      listOf(fixedKeystorePath, fixedKeystorePassword, fixedKeyAlias, fixedKeyPassword)
+          .all { !it.isNullOrBlank() }
+
+  signingConfigs {
+    if (hasCompleteFixedSigningConfig) {
+      create("fixedDistribution") {
+        storeFile = file(requireNotNull(fixedKeystorePath))
+        storePassword = fixedKeystorePassword
+        keyAlias = fixedKeyAlias
+        keyPassword = fixedKeyPassword
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
+        enableV4Signing = true
+      }
+    }
+  }
+
   buildTypes {
+    debug {
+      if (hasCompleteFixedSigningConfig) {
+        signingConfig = signingConfigs.getByName("fixedDistribution")
+      }
+    }
     release {
       isMinifyEnabled = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+      if (hasCompleteFixedSigningConfig) {
+        signingConfig = signingConfigs.getByName("fixedDistribution")
+      }
     }
   }
   flavorDimensions += "version"
