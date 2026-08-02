@@ -2,6 +2,7 @@ package io.github.jd1378.otphelper.ui.screens
 
 import android.Manifest
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
@@ -37,6 +42,8 @@ import io.github.jd1378.otphelper.ui.components.SkipDialog
 import io.github.jd1378.otphelper.ui.components.TitleBar
 import io.github.jd1378.otphelper.ui.components.TodoItem
 import io.github.jd1378.otphelper.ui.components.verticalColumnScrollbar
+import io.github.jd1378.otphelper.utils.Clipboard
+import kotlinx.coroutines.launch
 
 @Composable
 fun Permissions(
@@ -49,9 +56,34 @@ fun Permissions(
   val lifecycleOwner = LocalLifecycleOwner.current
   val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var diagnosticsBusy by remember { mutableStateOf(false) }
   val permLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         viewModel.updatePermissionsStatus(context)
+      }
+  val diagnosticsExportLauncher =
+      rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+          diagnosticsBusy = true
+          val message =
+              runCatching {
+                    val report = viewModel.buildDiagnostics(context)
+                    context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use {
+                      it.write(report)
+                    } ?: error("Unable to open diagnostic report destination")
+                    context.getString(R.string.diagnostics_exported)
+                  }
+                  .getOrElse {
+                    context.getString(
+                        R.string.diagnostics_failed,
+                        it.message ?: it.javaClass.simpleName,
+                    )
+                  }
+          diagnosticsBusy = false
+          Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
       }
 
   LaunchedEffect(lifecycleState) {
@@ -178,6 +210,11 @@ fun Permissions(
           modifier = Modifier.fillMaxWidth(),
           fontSize = 15.sp,
       )
+      Text(
+          stringResource(R.string.permission_honor_recents_lock_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
       TodoItem(
           text = stringResource(R.string.permission_todo_accessibility_fallback),
           actionText = stringResource(R.string.open_settings),
@@ -186,13 +223,55 @@ fun Permissions(
       ) {
         viewModel.onOpenAccessibilityPressed(context)
       }
-      TodoItem(
-          text = stringResource(R.string.permission_todo_shizuku_repair),
-          actionText = stringResource(R.string.run_repair),
-          intermediate = true,
-          checked = true,
+
+      Text(
+          stringResource(R.string.diagnostics_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          enabled = !diagnosticsBusy,
+          onClick = {
+            scope.launch {
+              diagnosticsBusy = true
+              val message =
+                  runCatching {
+                        val report = viewModel.buildDiagnostics(context)
+                        Clipboard.copyToClipboard(context, report, false)
+                        context.getString(R.string.diagnostics_copied)
+                      }
+                      .getOrElse {
+                        context.getString(
+                            R.string.diagnostics_failed,
+                            it.message ?: it.javaClass.simpleName,
+                        )
+                      }
+              diagnosticsBusy = false
+              Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+          },
       ) {
-        viewModel.onRunShizukuRepair(context)
+        Text(stringResource(R.string.copy_diagnostics))
+      }
+      OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          enabled = !diagnosticsBusy,
+          onClick = { diagnosticsExportLauncher.launch("otphelper-diagnostics.txt") },
+      ) {
+        Text(stringResource(R.string.export_diagnostics))
+      }
+
+      Text(
+          stringResource(R.string.permission_shizuku_optional_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          onClick = { viewModel.onRunShizukuRepair(context) },
+      ) {
+        Text(stringResource(R.string.permission_todo_shizuku_repair))
       }
 
       if (uiState.modeOfOperation == ModeOfOperation.Notification &&
