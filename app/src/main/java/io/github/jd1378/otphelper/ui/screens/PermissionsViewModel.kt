@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -59,6 +60,10 @@ constructor(
   private val _hasNotifPerm = MutableStateFlow(false)
   private val _hasNotifListenerPerm = MutableStateFlow(false)
   private val _hasAccessibilityNotificationService = MutableStateFlow(false)
+  private val notificationReadStates =
+      combine(_hasNotifListenerPerm, _hasAccessibilityNotificationService) { listener, accessibility ->
+        listener to accessibility
+      }
   private val _hasSmsListenerPerm = MutableStateFlow(false)
   private val _hasReadSmsPerm = MutableStateFlow(false)
   private val _isIgnoringBatteryOptimizations = MutableStateFlow(false)
@@ -70,8 +75,7 @@ constructor(
       combine(
               userSettingsRepository.userSettings,
               _hasNotifPerm,
-              _hasNotifListenerPerm,
-              _hasAccessibilityNotificationService,
+              notificationReadStates,
               _hasSmsListenerPerm,
               _hasReadSmsPerm,
               _isIgnoringBatteryOptimizations,
@@ -81,14 +85,15 @@ constructor(
           ) {
               userSettings,
               hasNotifPerm,
-              hasNotifListenerPerm,
-              hasAccessibilityNotificationService,
+              notificationReadStates,
               hasSmsListenerPerm,
               hasReadSmsPerm,
               isIgnoringBatteryOptimizations,
               hasAutostartSettings,
               hasRestrictedSettings,
               showSkipWarning ->
+            val (hasNotifListenerPerm, hasAccessibilityNotificationService) =
+                notificationReadStates
             val hasDoneAllSteps =
                 when (userSettings.modeOfOperation) {
                   ModeOfOperation.Notification -> hasNotifPerm && hasNotifListenerPerm
