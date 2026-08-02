@@ -15,7 +15,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -155,19 +154,11 @@ class PersistenceService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-    val accessibilityIntent =
-        PendingIntent.getActivity(
-            this,
-            4820,
-            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
     val permissionGranted = NotificationListener.isNotificationListenerServiceEnabled(this)
     val health = MonitoringHealthStore.snapshot(this)
     val status =
         when {
           health.listenerConnected -> R.string.persistence_notification_listener_ok
-          health.accessibilityConnected -> R.string.persistence_notification_fallback_active
           !permissionGranted -> R.string.persistence_notification_permission_missing
           else -> R.string.persistence_notification_listener_stalled
         }
@@ -184,7 +175,6 @@ class PersistenceService : Service() {
         .setPriority(NotificationCompat.PRIORITY_MIN)
         .setVisibility(NotificationCompat.VISIBILITY_SECRET)
         .addAction(0, getString(R.string.persistence_repair), repairIntent)
-        .addAction(0, getString(R.string.persistence_accessibility), accessibilityIntent)
         .build()
   }
 
