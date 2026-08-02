@@ -17,6 +17,7 @@ class App : Application(), Configuration.Provider {
 
   override fun onCreate() {
     super.onCreate()
+    AppLogger.initialize(applicationContext)
     AppLogger.i(
         "App",
         "onCreate: app process started, versionName=${BuildConfig.VERSION_NAME}, " +
