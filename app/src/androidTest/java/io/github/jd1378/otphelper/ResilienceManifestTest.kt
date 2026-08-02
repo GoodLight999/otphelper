@@ -22,6 +22,7 @@ import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -160,7 +161,7 @@ class ResilienceManifestTest {
   }
 
   @Test
-  fun sensitiveOtpBodyIsRedactedByDefaultAndReadableAfterAppOp() {
+  fun sensitiveOtpBodyIsProtectedByDefaultAndReadableAfterAppOp() {
     val component = ComponentName(context, NotificationListener::class.java).flattenToString()
     MonitoringHealthStore.markListenerConnected(context, false)
     try {
@@ -174,14 +175,20 @@ class ResilienceManifestTest {
       executeShellCommand(
           "cmd appops set --user current ${context.packageName} " +
               "RECEIVE_SENSITIVE_NOTIFICATIONS default")
-      val redactedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
-      val redactedOutput = executeShellCommand(ShizukuRepairManager.buildProbeCommand(redactedProbe))
-      assertTrue("Shell notification command did not post: $redactedOutput", redactedOutput.contains("posting"))
-      assertEquals(
+      val protectedProbe = NotificationIngestionSelfTest.prepareExternalProbe(context)
+      val protectedOutput = executeShellCommand(ShizukuRepairManager.buildProbeCommand(protectedProbe))
+      assertTrue("Shell notification command did not post: $protectedOutput", protectedOutput.contains("posting"))
+      val protectedResult = NotificationIngestionSelfTest.awaitResult(context)
+      assertNotEquals(
           "The external OTP probe was readable without the sensitive-notification AppOp; " +
               "this test would not prove the bypass",
-          NotificationIngestionSelfTest.State.FAILED,
-          NotificationIngestionSelfTest.awaitResult(context),
+          NotificationIngestionSelfTest.State.PASSED,
+          protectedResult,
+      )
+      assertTrue(
+          "Expected redaction or complete callback suppression, got $protectedResult",
+          protectedResult == NotificationIngestionSelfTest.State.FAILED ||
+              protectedResult == NotificationIngestionSelfTest.State.TIMED_OUT,
       )
 
       executeShellCommand(
