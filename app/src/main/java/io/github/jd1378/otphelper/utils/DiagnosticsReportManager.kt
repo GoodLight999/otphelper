@@ -62,7 +62,7 @@ object DiagnosticsReportManager {
       appendLine("sdk=${Build.VERSION.SDK_INT}")
       appendLine("release=${Build.VERSION.RELEASE}")
       appendLine("fingerprint=${Build.FINGERPRINT}")
-      appendLine("backgroundRestricted=${activityManager?.isBackgroundRestricted ?: "unknown"}")
+      appendLine("backgroundRestricted=${backgroundRestricted(activityManager)}")
       appendLine("appStandbyBucket=${appStandbyBucket(appContext)}")
       appendLine()
       appendLine("[monitoring]")
@@ -119,6 +119,13 @@ object DiagnosticsReportManager {
     format.timeZone = TimeZone.getDefault()
     return format.format(date)
   }
+
+  private fun backgroundRestricted(activityManager: ActivityManager?): String =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        (activityManager?.isBackgroundRestricted ?: "unknown").toString()
+      } else {
+        "unsupported"
+      }
 
   private fun isAccessibilityFallbackEnabled(context: Context): Boolean {
     val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false
