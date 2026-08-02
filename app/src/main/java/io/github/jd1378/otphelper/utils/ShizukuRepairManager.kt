@@ -8,6 +8,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
+import androidx.core.app.NotificationManagerCompat
 import io.github.jd1378.otphelper.BuildConfig
 import io.github.jd1378.otphelper.NotificationListener
 import io.github.jd1378.otphelper.PersistenceService
@@ -24,6 +26,9 @@ enum class ShizukuRepairResult {
   UNSUPPORTED,
   PERMISSION_DENIED,
   PERMISSION_REQUESTED,
+  NOTIFICATION_PERMISSION_MISSING,
+  NOTIFICATION_LISTENER_NOT_CONNECTED,
+  NOTIFICATION_TEXT_UNREADABLE,
 }
 
 /** Optional elevated repair path. Normal monitoring never depends on Shizuku. */
@@ -32,6 +37,7 @@ object ShizukuRepairManager {
   private const val MINIMUM_USER_SERVICE_VERSION = 11
   private const val USER_SERVICE_TAG = "otphelper-background-repair-v1"
   private const val BIND_TIMEOUT_SECONDS = 15L
+  private const val LISTENER_WAIT_MS = 8_000L
 
   fun repair(context: Context): ShizukuRepairResult {
     val appContext = context.applicationContext
@@ -107,7 +113,20 @@ object ShizukuRepairManager {
     }
 
     PersistenceService.requestListenerRebind(appContext)
-    return ShizukuRepairResult.SUCCESS
+    if (!waitForListenerConnection(appContext)) {
+      return ShizukuRepairResult.NOTIFICATION_LISTENER_NOT_CONNECTED
+    }
+    if (!NotificationHelper.hasNotifPermission(appContext) ||
+        !NotificationManagerCompat.from(appContext).areNotificationsEnabled()) {
+      return ShizukuRepairResult.NOTIFICATION_PERMISSION_MISSING
+    }
+
+    // A Shizuku command succeeding is not enough. Keep this feature only if the listener can read
+    // the actual six-digit body after the AppOp repair.
+    return when (NotificationIngestionSelfTest.runBlocking(appContext)) {
+      NotificationIngestionSelfTest.State.PASSED -> ShizukuRepairResult.SUCCESS
+      else -> ShizukuRepairResult.NOTIFICATION_TEXT_UNREADABLE
+    }
   }
 
   internal fun buildRepairCommands(
@@ -131,6 +150,15 @@ object ShizukuRepairManager {
             }
           }
           .toTypedArray()
+
+  private fun waitForListenerConnection(context: Context): Boolean {
+    val deadline = SystemClock.elapsedRealtime() + LISTENER_WAIT_MS
+    while (SystemClock.elapsedRealtime() < deadline) {
+      if (MonitoringHealthStore.snapshot(context).listenerConnected) return true
+      Thread.sleep(100L)
+    }
+    return MonitoringHealthStore.snapshot(context).listenerConnected
+  }
 
   private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 }
