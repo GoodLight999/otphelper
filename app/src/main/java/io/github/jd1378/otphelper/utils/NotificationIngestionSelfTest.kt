@@ -8,11 +8,14 @@ import java.security.SecureRandom
 /**
  * Verifies actual cross-package notification-body delivery in instrumentation tests.
  *
- * The probe is posted by Android shell with `cmd notification post`; an OTP Helper
- * self-notification is rejected because same-package delivery would not prove that real third-party
- * OTPs are readable. No production UI or elevated integration invokes this helper.
+ * A separate CI-only fixture APK posts the probe. An OTP Helper self-notification is rejected
+ * because same-package delivery would not prove that real third-party OTPs are readable. No
+ * production UI or elevated integration invokes this helper.
  */
 object NotificationIngestionSelfTest {
+  const val FIXTURE_PACKAGE = "io.github.jd1378.otphelper.fixture"
+  private const val FIXTURE_RECEIVER = "$FIXTURE_PACKAGE/.ProbeReceiver"
+  private const val FIXTURE_ACTION = "$FIXTURE_PACKAGE.POST_OTP"
   private const val PREFS = "notification_ingestion_self_test"
   private const val KEY_TOKEN = "token"
   private const val KEY_TAG = "tag"
@@ -43,14 +46,13 @@ object NotificationIngestionSelfTest {
         .putString(KEY_STATE, State.PENDING.name)
         .putLong(KEY_STARTED_AT, System.currentTimeMillis())
         .apply()
-    AppLogger.i(TAG, "external notification-body probe prepared")
+    AppLogger.i(TAG, "external fixture notification-body probe prepared")
     return Probe(token = token, tag = tag)
   }
 
-  fun buildShellPostCommand(probe: Probe): String =
-      "cmd notification post -t ${shellQuote("OTP Helper external read test")} " +
-          "${shellQuote(probe.tag)} " +
-          shellQuote("One-time verification code: ${probe.token}")
+  fun buildFixtureBroadcastCommand(probe: Probe): String =
+      "am broadcast -a $FIXTURE_ACTION -n $FIXTURE_RECEIVER " +
+          "--es token ${shellQuote(probe.token)} --es tag ${shellQuote(probe.tag)}"
 
   fun handlePostedNotification(
       context: Context,
@@ -63,9 +65,9 @@ object NotificationIngestionSelfTest {
     val expectedTag = prefs.getString(KEY_TAG, null) ?: return false
     if (notificationTag != expectedTag) return false
 
-    if (packageName == BuildConfig.APPLICATION_ID) {
+    if (packageName != FIXTURE_PACKAGE || packageName == BuildConfig.APPLICATION_ID) {
       prefs.edit().putString(KEY_STATE, State.FAILED.name).apply()
-      AppLogger.w(TAG, "rejected same-package notification-body probe")
+      AppLogger.w(TAG, "rejected notification probe from unexpected package=$packageName")
       return true
     }
 
@@ -74,7 +76,7 @@ object NotificationIngestionSelfTest {
     prefs.edit().putString(KEY_STATE, if (passed) State.PASSED.name else State.FAILED.name).apply()
     AppLogger.i(
         TAG,
-        "external notification-body probe completed: passed=$passed, sourcePackage=$packageName",
+        "fixture notification-body probe completed: passed=$passed, sourcePackage=$packageName",
     )
     return true
   }
