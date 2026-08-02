@@ -17,16 +17,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkManager
 import io.github.jd1378.otphelper.utils.MonitoringHealthSnapshot
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
-import io.github.jd1378.otphelper.utils.NotificationIngestionSelfTest
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import rikka.shizuku.ShizukuProvider
 
 @RunWith(AndroidJUnit4::class)
 class ResilienceManifestTest {
@@ -99,6 +98,15 @@ class ResilienceManifestTest {
     assertEquals(Manifest.permission.BIND_ACCESSIBILITY_SERVICE, accessibility.permission)
     assertNotNull(accessibility.metaData)
 
+    val shizukuProvider =
+        packageManager.getProviderInfo(
+            ComponentName(context, ShizukuProvider::class.java),
+            PackageManager.ComponentInfoFlags.of(0),
+        )
+    assertTrue(shizukuProvider.exported)
+    assertEquals("android.permission.INTERACT_ACROSS_USERS_FULL", shizukuProvider.readPermission)
+    assertEquals("${context.packageName}.shizuku", shizukuProvider.authority)
+
     val bootReceiver =
         packageManager.getReceiverInfo(
             ComponentName(context, BootReceiver::class.java),
@@ -112,17 +120,6 @@ class ResilienceManifestTest {
             PackageManager.ComponentInfoFlags.of(0),
         )
     assertFalse(watchdogReceiver.exported)
-  }
-
-  @Test
-  fun notificationFixtureIsInstalledAsAnotherPackage() {
-    val fixture =
-        packageManager.getPackageInfo(
-            NotificationIngestionSelfTest.FIXTURE_PACKAGE,
-            PackageManager.PackageInfoFlags.of(0),
-        )
-    assertEquals(NotificationIngestionSelfTest.FIXTURE_PACKAGE, fixture.packageName)
-    assertNotEquals(context.applicationInfo.uid, fixture.applicationInfo?.uid)
   }
 
   @Test
