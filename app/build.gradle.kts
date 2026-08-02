@@ -52,7 +52,6 @@ android {
   }
   kotlinOptions { jvmTarget = "1.8" }
   buildFeatures {
-    aidl = true
     compose = true
     buildConfig = true
   }
@@ -120,10 +119,6 @@ dependencies {
   implementation("androidx.core:core-splashscreen:1.1.0-rc01")
   implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.4.0")
   implementation("io.github.reactivecircus.cache4k:cache4k:0.14.0")
-
-  // Optional elevated repair path. The app remains fully functional without Shizuku.
-  implementation("dev.rikka.shizuku:api:13.1.5")
-  implementation("dev.rikka.shizuku:provider:13.1.5")
 }
 
 hilt { enableAggregatingTask = true }
