@@ -18,8 +18,7 @@ class PersistenceWatchdogWorker(
   override suspend fun doWork(): Result {
     AppLogger.i("PersistenceWatchdog", "watchdog tick")
     PersistenceService.start(applicationContext)
-    if (NotificationListener.isNotificationListenerServiceEnabled(applicationContext) &&
-        !NotificationListener.isConnected) {
+    if (NotificationListener.isNotificationListenerServiceEnabled(applicationContext)) {
       try {
         NotificationListener.requestRebind(
             ComponentName(applicationContext, NotificationListener::class.java))
