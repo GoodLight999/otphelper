@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -32,12 +33,21 @@ class PersistenceService : Service() {
     private const val RESTART_DELAY_MS = 8_000L
 
     fun start(context: Context) {
-      val intent = Intent(context, PersistenceService::class.java)
       try {
-        ContextCompat.startForegroundService(context, intent)
+        ContextCompat.startForegroundService(context, Intent(context, PersistenceService::class.java))
       } catch (error: Throwable) {
         AppLogger.e(TAG, "Unable to start foreground persistence service", error)
-        MyWorkManager.rebindListeners(context, true)
+        requestListenerRebind(context)
+      }
+    }
+
+    fun requestListenerRebind(context: Context) {
+      if (!NotificationListener.isNotificationListenerServiceEnabled(context)) return
+      try {
+        NotificationListenerService.requestRebind(
+            ComponentName(context, NotificationListener::class.java))
+      } catch (error: Throwable) {
+        AppLogger.e(TAG, "notification listener rebind failed", error)
       }
     }
 
@@ -63,7 +73,7 @@ class PersistenceService : Service() {
   private val heartbeat =
       object : Runnable {
         override fun run() {
-          repairListenerConnection()
+          requestListenerRebind(this@PersistenceService)
           updateNotification()
           handler.postDelayed(this, HEARTBEAT_MS)
         }
@@ -79,7 +89,7 @@ class PersistenceService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     AppLogger.i(TAG, "onStartCommand action=${intent?.action}, flags=$flags, startId=$startId")
-    repairListenerConnection()
+    requestListenerRebind(this)
     updateNotification()
     return START_STICKY
   }
@@ -99,17 +109,6 @@ class PersistenceService : Service() {
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
-
-  private fun repairListenerConnection() {
-    if (!NotificationListener.isNotificationListenerServiceEnabled(this)) return
-    try {
-      // requestRebind is idempotent. Repeating it is safer than trusting OEM process state.
-      NotificationListener.requestRebind(ComponentName(this, NotificationListener::class.java))
-      AppLogger.i(TAG, "notification listener rebind requested")
-    } catch (error: Throwable) {
-      AppLogger.e(TAG, "notification listener rebind failed", error)
-    }
-  }
 
   private fun startInForeground() {
     val notification = buildNotification()
