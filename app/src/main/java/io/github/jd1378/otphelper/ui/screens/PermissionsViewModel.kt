@@ -13,6 +13,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jd1378.otphelper.INTENT_ACTION_SHIZUKU_REPAIR
+import io.github.jd1378.otphelper.MainActivity
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
@@ -171,6 +173,18 @@ constructor(
   fun onOpenBatteryOptimizationsPressed(context: Context) {
     val intent = Intent().setAction(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
     context.startActivity(intent)
+  }
+
+  fun onOpenAccessibilityPressed(context: Context) {
+    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+  }
+
+  fun onRunShizukuRepair(context: Context) {
+    context.startActivity(
+        Intent(context, MainActivity::class.java)
+            .setAction(INTENT_ACTION_SHIZUKU_REPAIR)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    )
   }
 
   fun onOpenAutostartPressed(context: Context) {
