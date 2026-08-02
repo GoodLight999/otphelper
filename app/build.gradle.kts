@@ -78,6 +78,8 @@ dependencies {
   implementation("androidx.datastore:datastore-preferences:1.1.7")
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.yaml:snakeyaml:2.2")
+  // Android's org.json classes are non-functional stubs in local JVM tests.
+  testImplementation("org.json:json:20260522")
   androidTestImplementation("androidx.test.ext:junit:1.3.0")
   androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
   androidTestImplementation("androidx.compose.ui:ui-test-junit4")
