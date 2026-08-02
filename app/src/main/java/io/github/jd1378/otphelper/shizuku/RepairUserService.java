@@ -2,15 +2,13 @@ package io.github.jd1378.otphelper.shizuku;
 
 import android.content.Context;
 import android.os.RemoteException;
+import android.os.SystemClock;
 
 import androidx.annotation.Keep;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Short-lived Shizuku UserService used only for the optional repair action.
@@ -21,7 +19,8 @@ import java.util.concurrent.TimeUnit;
  */
 @Keep
 public final class RepairUserService extends IRepairService.Stub {
-  private static final long COMMAND_TIMEOUT_SECONDS = 10L;
+  private static final long COMMAND_TIMEOUT_MILLIS = 10_000L;
+  private static final int MAX_OUTPUT_LINES = 30;
 
   public RepairUserService() {}
 
@@ -35,31 +34,21 @@ public final class RepairUserService extends IRepairService.Stub {
       throw new RemoteException("No repair commands were supplied");
     }
 
-    List<String> summaries = new ArrayList<>();
+    StringBuilder summaries = new StringBuilder();
     for (String command : commands) {
       if (command == null || command.trim().isEmpty()) continue;
-      summaries.add(runCommand(command));
+      if (summaries.length() > 0) summaries.append('\n');
+      summaries.append(runCommand(command));
     }
-    return String.join("\n", summaries);
+    return summaries.toString();
   }
 
   private String runCommand(String command) throws RemoteException {
     Process process = null;
     try {
       process = new ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start();
-      boolean finished = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-      if (!finished) {
-        process.destroyForcibly();
-        throw new RemoteException("Repair command timed out: " + command);
-      }
-
-      String output;
-      try (BufferedReader reader =
-          new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-        output = reader.lines().limit(30).reduce("", (left, right) -> left + right + "\n").trim();
-      }
-
-      int exitCode = process.exitValue();
+      int exitCode = waitForProcess(process, command);
+      String output = readLimitedOutput(process);
       if (exitCode != 0) {
         throw new RemoteException(
             "Repair command failed (" + exitCode + "): " + command + "\n" + output);
@@ -77,6 +66,37 @@ public final class RepairUserService extends IRepairService.Stub {
     } finally {
       if (process != null) process.destroy();
     }
+  }
+
+  private int waitForProcess(Process process, String command)
+      throws InterruptedException, RemoteException {
+    long deadline = SystemClock.elapsedRealtime() + COMMAND_TIMEOUT_MILLIS;
+    while (true) {
+      try {
+        return process.exitValue();
+      } catch (IllegalThreadStateException stillRunning) {
+        if (SystemClock.elapsedRealtime() >= deadline) {
+          process.destroy();
+          throw new RemoteException("Repair command timed out: " + command);
+        }
+        Thread.sleep(50L);
+      }
+    }
+  }
+
+  private String readLimitedOutput(Process process) throws IOException {
+    StringBuilder output = new StringBuilder();
+    try (BufferedReader reader =
+        new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+      String line;
+      int count = 0;
+      while (count < MAX_OUTPUT_LINES && (line = reader.readLine()) != null) {
+        if (output.length() > 0) output.append('\n');
+        output.append(line);
+        count++;
+      }
+    }
+    return output.toString();
   }
 
   @Override
