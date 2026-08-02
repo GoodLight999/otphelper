@@ -5,12 +5,12 @@ import androidx.compose.runtime.Stable
 import androidx.datastore.core.DataStore
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.UserSettings
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 
 @Singleton
 @Stable
@@ -98,6 +98,24 @@ constructor(
   override suspend fun setCleanupPhrases(list: List<String>) {
     userSettingsStore.updateData { currentSettings ->
       currentSettings.toBuilder().clearCleanupPhrases().addAllCleanupPhrases(list).build()
+    }
+  }
+
+  override suspend fun setPhraseLists(
+      sensitive: List<String>,
+      ignored: List<String>,
+      cleanup: List<String>,
+  ) {
+    userSettingsStore.updateData { currentSettings ->
+      currentSettings
+          .toBuilder()
+          .clearSensitivePhrases()
+          .addAllSensitivePhrases(sensitive)
+          .clearIgnoredPhrases()
+          .addAllIgnoredPhrases(ignored)
+          .clearCleanupPhrases()
+          .addAllCleanupPhrases(cleanup)
+          .build()
     }
   }
 
