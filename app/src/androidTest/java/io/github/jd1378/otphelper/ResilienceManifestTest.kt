@@ -123,18 +123,50 @@ class ResilienceManifestTest {
     MonitoringHealthStore.markListenerConnected(context, false)
     try {
       executeShellCommand("cmd notification allow_listener $component")
-      val deadline = SystemClock.elapsedRealtime() + 15_000L
-      while (
-          !MonitoringHealthStore.snapshot(context).listenerConnected &&
-              SystemClock.elapsedRealtime() < deadline) {
-        Thread.sleep(100L)
-      }
       assertTrue(
           "NotificationListenerService did not report onListenerConnected after permission grant",
-          MonitoringHealthStore.snapshot(context).listenerConnected,
+          waitForHealth { it.listenerConnected },
       )
     } finally {
       executeShellCommand("cmd notification disallow_listener $component")
+    }
+  }
+
+  @Test
+  fun accessibilityFallbackCanActuallyBindOnApi35() {
+    val component =
+        ComponentName(context, AccessibilityNotificationService::class.java).flattenToString()
+    val previousServices = executeShellCommand("settings get secure enabled_accessibility_services").trim()
+    val previousEnabled = executeShellCommand("settings get secure accessibility_enabled").trim()
+    val restoredServices = previousServices.takeUnless { it.isBlank() || it == "null" }
+    val mergedServices =
+        restoredServices
+            ?.split(':')
+            ?.filter { it.isNotBlank() }
+            ?.plus(component)
+            ?.distinct()
+            ?.joinToString(":")
+            ?: component
+
+    MonitoringHealthStore.markAccessibilityConnected(context, false)
+    try {
+      executeShellCommand("settings put secure enabled_accessibility_services $mergedServices")
+      executeShellCommand("settings put secure accessibility_enabled 1")
+      assertTrue(
+          "Accessibility fallback did not report onServiceConnected after enablement",
+          waitForHealth { it.accessibilityConnected },
+      )
+    } finally {
+      if (restoredServices == null) {
+        executeShellCommand("settings delete secure enabled_accessibility_services")
+      } else {
+        executeShellCommand("settings put secure enabled_accessibility_services $restoredServices")
+      }
+      if (previousEnabled.isBlank() || previousEnabled == "null") {
+        executeShellCommand("settings delete secure accessibility_enabled")
+      } else {
+        executeShellCommand("settings put secure accessibility_enabled $previousEnabled")
+      }
     }
   }
 
@@ -157,6 +189,15 @@ class ResilienceManifestTest {
     snapshot = MonitoringHealthStore.snapshot(context)
     assertFalse(snapshot.listenerConnected)
     assertTrue(snapshot.accessibilityConnected)
+  }
+
+  private fun waitForHealth(predicate: (io.github.jd1378.otphelper.utils.MonitoringHealthSnapshot) -> Boolean): Boolean {
+    val deadline = SystemClock.elapsedRealtime() + 15_000L
+    while (SystemClock.elapsedRealtime() < deadline) {
+      if (predicate(MonitoringHealthStore.snapshot(context))) return true
+      Thread.sleep(100L)
+    }
+    return predicate(MonitoringHealthStore.snapshot(context))
   }
 
   private fun executeShellCommand(command: String): String {
