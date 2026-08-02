@@ -23,6 +23,7 @@ import io.github.jd1378.otphelper.di.RecentDetectedCodesHolder
 import io.github.jd1378.otphelper.di.RecentDetectedMessageHolder
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
+import io.github.jd1378.otphelper.utils.NotificationIngestionSelfTest
 import io.github.jd1378.otphelper.worker.CodeDetectedWorker
 import javax.inject.Inject
 
@@ -63,16 +64,17 @@ class NotificationListener : NotificationListenerService() {
             "Đã ẩn nội dung thông báo nhạy cảm",
         )
 
-    val notification_text_keys =
+    val notificationTextKeys =
         listOf(
+            Notification.EXTRA_TITLE,
+            Notification.EXTRA_TITLE_BIG,
             Notification.EXTRA_TEXT,
             Notification.EXTRA_SUB_TEXT,
             Notification.EXTRA_INFO_TEXT,
             Notification.EXTRA_SUMMARY_TEXT,
             Notification.EXTRA_BIG_TEXT,
-            Notification.EXTRA_TEXT_LINES,
         )
-    val notification_text_arrays_keys = listOf(Notification.EXTRA_TEXT_LINES)
+    val notificationTextArrayKeys = listOf(Notification.EXTRA_TEXT_LINES)
 
     fun isNotificationListenerServiceEnabled(context: Context): Boolean =
         NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
@@ -91,6 +93,22 @@ class NotificationListener : NotificationListenerService() {
           PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
           PackageManager.DONT_KILL_APP,
       )
+    }
+
+    fun extractNotificationText(notification: Notification): String {
+      val extras = notification.extras
+      return buildString {
+        for (key in notificationTextKeys) {
+          extras.getCharSequence(key)?.toString()?.takeIf { it.isNotEmpty() }?.let {
+            append(it).append('\n')
+          }
+        }
+        for (key in notificationTextArrayKeys) {
+          extras.getCharSequenceArray(key)?.forEach { value ->
+            if (!value.isNullOrBlank()) append(value).append('\n')
+          }
+        }
+      }
     }
 
     @SuppressLint("DiscouragedApi")
@@ -123,20 +141,35 @@ class NotificationListener : NotificationListenerService() {
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
     super.onNotificationPosted(sbn)
+    if (sbn == null) return
+
+    AppLogger.d(TAG, "onNotificationPosted: pkg=${sbn.packageName}, id=${sbn.id}")
+    val notification = sbn.notification
+    val rawNotificationText = extractNotificationText(notification)
+
+    // This must run before mode checks and own-package filtering. It proves that the listener
+    // received the actual notification body, not merely that Android connected the service.
+    if (
+        NotificationIngestionSelfTest.handlePostedNotification(
+            applicationContext,
+            sbn.packageName,
+            sbn.id,
+            rawNotificationText,
+        )) {
+      return
+    }
+
     autoUpdatingListenerUtils.awaitCodeExtractor()
     if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification &&
         !autoUpdatingListenerUtils.isAutoDismissEnabled &&
         !autoUpdatingListenerUtils.isAutoMarkAsReadEnabled) {
       return
     }
-    if (sbn == null) return
 
-    AppLogger.d(TAG, "onNotificationPosted: pkg=${sbn.packageName}, id=${sbn.id}")
     if (sbn.packageName == BuildConfig.APPLICATION_ID && sbn.id == R.id.code_detected_notify_id) {
       return
     }
 
-    val notification = sbn.notification
     val isForegroundService = (notification.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0
     val isOngoing = (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0
     if (isForegroundService || isOngoing) {
@@ -147,22 +180,11 @@ class NotificationListener : NotificationListenerService() {
     var codeDetected = false
     if (autoUpdatingListenerUtils.modeOfOperation == ModeOfOperation.Notification) {
       val codeExtractor = autoUpdatingListenerUtils.codeExtractor ?: return
-      val extras = notification.extras
-      val notifyTexts = StringBuilder()
-      for (key in notification_text_keys) {
-        extras.getCharSequence(key)?.toString()?.takeIf { it.isNotEmpty() }?.let {
-          notifyTexts.append(it).append('\n')
-        }
-      }
-      for (key in notification_text_arrays_keys) {
-        extras.getCharSequenceArray(key)?.forEach { notifyTexts.append(it).append('\n') }
-      }
-      val notifyText = notifyTexts.toString()
-      if (codeExtractor.shouldIgnore(notifyText)) {
+      if (codeExtractor.shouldIgnore(rawNotificationText)) {
         AppLogger.d(TAG, "notification ignored by ignore phrases, pkg=${sbn.packageName}")
         return
       }
-      val notificationText = codeExtractor.cleanup(notifyText)
+      val notificationText = codeExtractor.cleanup(rawNotificationText)
       if (notificationText.isNotEmpty()) {
         val code = codeExtractor.getCode(notificationText, false)
         if (code.isNullOrEmpty()) {
@@ -196,29 +218,7 @@ class NotificationListener : NotificationListenerService() {
       val message = synchronized(DETECTION_LOCK) { recentDetectedMessageHolder.message }
       if (message != null) {
         if (System.currentTimeMillis() - message.timestamp > DETECTION_TIMEOUT_MS) return
-        codeDetected = hasRedactedMessage(notification)
-        if (!codeDetected) {
-          val extras = notification.extras
-          for (key in notification_text_keys) {
-            val str = extras.getCharSequence(key)?.toString()
-            if (!str.isNullOrBlank() && str.contains(message.body)) {
-              codeDetected = true
-              break
-            }
-          }
-          if (!codeDetected) {
-            for (key in notification_text_arrays_keys) {
-              val array = extras.getCharSequenceArray(key) ?: continue
-              for (charSeq in array) {
-                if (!charSeq.isNullOrBlank() && charSeq.contains(message.body)) {
-                  codeDetected = true
-                  break
-                }
-              }
-              if (codeDetected) break
-            }
-          }
-        }
+        codeDetected = hasRedactedMessage(notification) || rawNotificationText.contains(message.body)
       }
     }
 
