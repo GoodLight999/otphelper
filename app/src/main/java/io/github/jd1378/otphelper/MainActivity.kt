@@ -114,10 +114,14 @@ class MainActivity : AppCompatActivity() {
           try {
             when (withContext(Dispatchers.IO) { ShizukuRepairManager.repair(applicationContext) }) {
               ShizukuRepairResult.SUCCESS -> getString(R.string.persistence_shizuku_success)
-              ShizukuRepairResult.UNAVAILABLE ->
-                  getString(R.string.persistence_shizuku_unavailable)
+              ShizukuRepairResult.MANAGER_NOT_INSTALLED ->
+                  getString(R.string.persistence_shizuku_manager_missing)
+              ShizukuRepairResult.SERVICE_NOT_RUNNING ->
+                  getString(R.string.persistence_shizuku_service_not_running)
               ShizukuRepairResult.UNSUPPORTED ->
                   getString(R.string.persistence_shizuku_unsupported)
+              ShizukuRepairResult.PERMISSION_DENIED ->
+                  getString(R.string.persistence_shizuku_permission_denied)
               ShizukuRepairResult.PERMISSION_REQUESTED ->
                   getString(R.string.persistence_shizuku_permission_requested)
             }
