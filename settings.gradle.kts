@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "OtpHelper"
 
 include(":app")
+include(":notification-fixture")
