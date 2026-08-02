@@ -32,7 +32,35 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
       - name: Grant execute permission
         run: chmod +x gradlew .github/scripts/*.sh
+      - name: Prepare fixed distribution signing key
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.OTPHELPER_SIGNING_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
+          CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" \
+                || -z "$KEY_PASSWORD" || -z "$CERT_SHA256" ]]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fixed signing secrets are incomplete. CI may test ephemeral builds, but no APK will be distributed."
+            exit 0
+          fi
+
+          key_path="$RUNNER_TEMP/otphelper-fixed-signing.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "path=$key_path" >> "$GITHUB_OUTPUT"
       - name: Unit tests, lint, debug and release builds
+        env:
+          OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          OTPHELPER_KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
         run: >-
           ./gradlew --no-daemon
           :app:testNormalDebugUnitTest
@@ -46,11 +74,20 @@ jobs:
           --stacktrace
       - name: Verify distributed APK contents
         run: .github/scripts/verify-distributed-apks.sh
-      - name: Upload installable debug APKs
-        if: success()
+      - name: Verify fixed signing certificate
+        if: steps.signing.outputs.available == 'true'
+        env:
+          OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
+        run: .github/scripts/verify-fixed-signing.sh
+      - name: Refuse ephemeral APK distribution
+        if: steps.signing.outputs.available != 'true'
+        run: >-
+          echo "Installable artifact upload intentionally disabled: fixed signing secrets are not configured."
+      - name: Upload fixed-signed installable APKs
+        if: success() && steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: otphelper-magic-os-debug-apks
+          name: otphelper-magic-os-fixed-signed-apks
           path: app/build/outputs/apk/**/debug/*.apk
           if-no-files-found: error
           retention-days: 30
