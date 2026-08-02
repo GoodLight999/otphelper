@@ -7,7 +7,6 @@ import dagger.hilt.android.HiltAndroidApp
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
 import io.github.jd1378.otphelper.utils.NotificationHelper.Companion.createNotificationChannels
-import io.github.jd1378.otphelper.utils.ShizukuConnectionManager
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -21,7 +20,6 @@ class App : Application(), Configuration.Provider {
     super.onCreate()
     AppLogger.initialize(applicationContext)
     MonitoringHealthStore.markProcessStarted(applicationContext)
-    ShizukuConnectionManager.initialize(applicationContext)
     AppLogger.i(
         "App",
         "onCreate: app process started, versionName=${BuildConfig.VERSION_NAME}, " +
