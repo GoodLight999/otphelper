@@ -158,6 +158,8 @@ class PersistenceService : Service() {
     val status =
         when {
           health.listenerConnected -> R.string.persistence_notification_listener_ok
+          health.accessibilityConnected ->
+              R.string.persistence_notification_accessibility_ok
           !permissionGranted -> R.string.persistence_notification_permission_missing
           else -> R.string.persistence_notification_listener_stalled
         }
