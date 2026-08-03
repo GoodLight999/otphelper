@@ -45,7 +45,6 @@ class MainActivity : AppCompatActivity() {
     installSplashScreen()
     super.onCreate(savedInstanceState)
     AppLogger.i("MainActivity", "onCreate")
-    ActivityHelper.adjustFontSize(this, scale)
 
     handleIntent(intent)
 
@@ -75,12 +74,6 @@ class MainActivity : AppCompatActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     handleIntent(intent)
-  }
-
-  override fun onStart() {
-    super.onStart()
-    handleIntent(intent)
-    intent = null
   }
 
   private fun handleIntent(intent: Intent?) {
