@@ -41,7 +41,9 @@ class AccessibilityNotificationService : AccessibilityService() {
 
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
     if (event?.eventType != AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) return
-    if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification) return
+    if (!autoUpdatingListenerUtils.awaitCodeExtractor()) return
+    val listenerSettings = autoUpdatingListenerUtils.current()
+    if (listenerSettings.modeOfOperation != ModeOfOperation.Notification) return
 
     val notification = event.parcelableData as? Notification
     val isNotificationEvent =
@@ -52,14 +54,12 @@ class AccessibilityNotificationService : AccessibilityService() {
     if (packageName == applicationContext.packageName) return
 
     if (notification != null) {
-      val isForegroundService =
-          notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0
+      val isForegroundService = notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0
       val isOngoing = notification.flags and Notification.FLAG_ONGOING_EVENT != 0
       if (isForegroundService || isOngoing) return
     }
 
-    autoUpdatingListenerUtils.awaitCodeExtractor()
-    val extractor = autoUpdatingListenerUtils.codeExtractor ?: return
+    val extractor = listenerSettings.codeExtractor ?: return
     val rawText = collectNotificationText(event, notification)
     if (rawText.isBlank() || extractor.shouldIgnore(rawText)) return
 
@@ -119,9 +119,7 @@ class AccessibilityNotificationService : AccessibilityService() {
 
     if (notification != null) {
       add(notification.tickerText)
-      NotificationListener.extractNotificationText(notification)
-          .lineSequence()
-          .forEach { add(it) }
+      NotificationListener.extractNotificationText(notification).lineSequence().forEach { add(it) }
     }
 
     return lines.joinToString(separator = "\n")
