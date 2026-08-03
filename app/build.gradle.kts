@@ -199,7 +199,7 @@ class ApplicationVariantAction : Action<ApplicationVariant> {
 
         val builtType = variant.buildType.name
         val versionName = variant.versionName
-        val architecture = abi ?: "-universal"
+        val architecture = abi ?: "universal"
 
         output.outputFileName =
             "otp-helper--${builtType}-${versionName}-${architecture}-${versionCode}.apk"
