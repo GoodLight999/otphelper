@@ -5,14 +5,25 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import androidx.core.content.ContextCompat
 
 class ActivityHelper {
   companion object {
     @SuppressLint("QueryPermissionsNeeded")
     fun isCallable(context: Context, intent: Intent): Boolean {
-      val list =
+      val matches =
           context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-      return list.size > 0
+      return matches.any { resolveInfo ->
+        val activityInfo = resolveInfo.activityInfo ?: return@any false
+        val samePackage = activityInfo.packageName == context.packageName
+        val exportedOrInternal = samePackage || activityInfo.exported
+        val requiredPermission = activityInfo.permission
+        val permissionGranted =
+            requiredPermission.isNullOrBlank() ||
+                ContextCompat.checkSelfPermission(context, requiredPermission) ==
+                    PackageManager.PERMISSION_GRANTED
+        exportedOrInternal && permissionGranted
+      }
     }
 
     fun adjustFontSize(context: Context, scale: Float = 1.0f): Context {
