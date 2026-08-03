@@ -25,14 +25,17 @@
   <string name="persistence_repair">修復</string>
   <string name="persistence_repair_started">標準のバックグラウンド修復を実行しました。</string>
 
-  <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、Listener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
+  <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、未接続時だけのListener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
   <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にしてください。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
+  <string name="permission_advanced_notification_recovery_desc">標準の通知アクセスで動作している場合、以下の機能は不要です。別アプリのOTP本文が伏字になる、または標準Listenerが接続できない場合だけ、高度な修復を開いてください。</string>
+  <string name="show_advanced_notification_recovery">高度な通知修復を表示</string>
+  <string name="hide_advanced_notification_recovery">高度な通知修復を隠す</string>
   <string name="accessibility_service_label">OTP通知リーダー</string>
   <string name="accessibility_service_description">Androidの通知ユーザー補助イベントだけを読み、ワンタイムコードを検出します。画面内容の取得、ジェスチャー、キー入力、スクリーンショットは使用しません。端末ロック中は通知の公開版しか渡されない場合があります。</string>
   <string name="permission_todo_accessibility_notifications">ユーザー補助の通知イベント読取りを有効化</string>
   <string name="permission_accessibility_notification_desc">Androidの公開ユーザー補助APIによる任意の第2通知読取り経路です。Android 16でもTYPE_NOTIFICATION_STATE_CHANGEDとNotification本体の受渡しは公式仕様として残っています。ただし端末ロック中の非公開通知は公開版へ置換される場合があります。画面内容・ジェスチャー・キー入力・スクリーンショットは要求しません。</string>
 
-  <string name="permission_shizuku_notification_desc">Android 15以降向けの任意の修復手段です。公式Shizuku APIのshell／root権限でRECEIVE_SENSITIVE_NOTIFICATIONS AppOpを設定し、Androidが保持するtrusted Listener情報を更新するため通知アクセスを再登録します。ユーザー補助の通知イベント経路やSMSモードには不要です。</string>
+  <string name="permission_shizuku_notification_desc">Android 15以降向けの任意の修復手段です。公式Shizuku APIのshell／root権限でRECEIVE_SENSITIVE_NOTIFICATIONS AppOpを設定し、Androidが保持するtrusted Listener情報を更新するため通知アクセスを再登録します。標準の通知アクセスで本文を読める端末、ユーザー補助の通知イベント経路、SMSモードには不要です。</string>
   <string name="permission_shizuku_status">Shizuku：Manager %1$s／Binder %2$s／権限 %3$s</string>
   <string name="permission_shizuku_installed">検出済み</string>
   <string name="permission_shizuku_not_installed">未検出</string>
