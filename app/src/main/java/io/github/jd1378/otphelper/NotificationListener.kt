@@ -146,10 +146,11 @@ class NotificationListener : NotificationListenerService() {
     val notification = sbn.notification
     val rawNotificationText = extractNotificationText(notification)
 
-    autoUpdatingListenerUtils.awaitCodeExtractor()
-    if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification &&
-        !autoUpdatingListenerUtils.isAutoDismissEnabled &&
-        !autoUpdatingListenerUtils.isAutoMarkAsReadEnabled) {
+    if (!autoUpdatingListenerUtils.awaitCodeExtractor()) return
+    val listenerSettings = autoUpdatingListenerUtils.current()
+    if (listenerSettings.modeOfOperation != ModeOfOperation.Notification &&
+        !listenerSettings.isAutoDismissEnabled &&
+        !listenerSettings.isAutoMarkAsReadEnabled) {
       return
     }
 
@@ -165,8 +166,8 @@ class NotificationListener : NotificationListenerService() {
     }
 
     var codeDetected = false
-    if (autoUpdatingListenerUtils.modeOfOperation == ModeOfOperation.Notification) {
-      val codeExtractor = autoUpdatingListenerUtils.codeExtractor ?: return
+    if (listenerSettings.modeOfOperation == ModeOfOperation.Notification) {
+      val codeExtractor = listenerSettings.codeExtractor ?: return
       if (codeExtractor.shouldIgnore(rawNotificationText)) {
         AppLogger.d(TAG, "notification ignored by ignore phrases, pkg=${sbn.packageName}")
         return
@@ -212,10 +213,10 @@ class NotificationListener : NotificationListenerService() {
     if (!codeDetected) return
     AppLogger.i(
         TAG,
-        "post-detection actions: autoMarkAsRead=${autoUpdatingListenerUtils.isAutoMarkAsReadEnabled}, " +
-            "autoDismiss=${autoUpdatingListenerUtils.isAutoDismissEnabled}, pkg=${sbn.packageName}",
+        "post-detection actions: autoMarkAsRead=${listenerSettings.isAutoMarkAsReadEnabled}, " +
+            "autoDismiss=${listenerSettings.isAutoDismissEnabled}, pkg=${sbn.packageName}",
     )
-    if (autoUpdatingListenerUtils.isAutoMarkAsReadEnabled) {
+    if (listenerSettings.isAutoMarkAsReadEnabled) {
       notification.actions?.forEach { action ->
         val isReadAction =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
@@ -234,7 +235,7 @@ class NotificationListener : NotificationListenerService() {
         }
       }
     }
-    if (autoUpdatingListenerUtils.isAutoDismissEnabled) cancelNotification(sbn.key)
+    if (listenerSettings.isAutoDismissEnabled) cancelNotification(sbn.key)
     synchronized(DETECTION_LOCK) { recentDetectedMessageHolder.message = null }
   }
 
