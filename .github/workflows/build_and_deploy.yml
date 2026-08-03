@@ -1,4 +1,4 @@
-name: build
+name: Fixed-signed fork release
 
 on:
   release:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: otphelper-release-${{ github.ref }}
+  group: otphelper-fork-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -47,7 +47,14 @@ jobs:
           set -euo pipefail
           if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" \
                 || -z "$KEY_PASSWORD" || -z "$CERT_SHA256" ]]; then
-            echo "::error::Release refused: the permanent OTP Helper signing secrets are incomplete."
+            echo "::error::Fork release refused: permanent signing Secrets are incomplete."
+            exit 1
+          fi
+
+          normalized_cert="$(printf '%s' "$CERT_SHA256" \
+            | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [[ ! "$normalized_cert" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::OTPHELPER_SIGNING_CERT_SHA256 is not a 64-hex digest."
             exit 1
           fi
 
@@ -56,7 +63,7 @@ jobs:
           chmod 600 "$key_path"
           echo "path=$key_path" >> "$GITHUB_OUTPUT"
 
-      - name: Build fixed-signed release artifacts
+      - name: Build all fixed-signed APK variants
         env:
           OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
           OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
@@ -65,51 +72,30 @@ jobs:
         run: >-
           ./gradlew --no-daemon --no-build-cache
           :app:clean
-          :app:bundlePlayRelease
+          :app:assembleNormalDebug
+          :app:assemblePlayDebug
           :app:assembleNormalRelease
+          :app:assemblePlayRelease
           --stacktrace
 
-      - name: Verify APK certificate
+      - name: Verify APK contents and privacy contracts
+        run: .github/scripts/verify-distributed-apks.sh
+
+      - name: Verify every APK certificate
         env:
           OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
         run: .github/scripts/verify-fixed-signing.sh
 
-      - name: Verify App Bundle certificate
-        shell: bash
-        env:
-          EXPECTED_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
-        run: |
-          set -euo pipefail
-          export LC_ALL=C
-          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" \
-            | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
-          if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "Invalid expected App Bundle certificate SHA-256" >&2
-            exit 1
-          fi
+      - name: Upload fixed-signed release APKs for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: otphelper-fixed-signed-release-apks
+          path: app/build/outputs/apk/*/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
 
-          mapfile -t bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print | sort)
-          if (( ${#bundles[@]} != 1 )); then
-            echo "Expected exactly one App Bundle, found ${#bundles[@]}" >&2
-            exit 1
-          fi
-
-          bundle="${bundles[0]}"
-          jarsigner -verify -strict "$bundle"
-          actual="$(keytool -printcert -jarfile "$bundle" \
-            | sed -n 's/^[[:space:]]*SHA256: //p' \
-            | head -n 1 \
-            | tr -d ':[:space:]' \
-            | tr '[:upper:]' '[:lower:]')"
-          if [[ "$actual" != "$expected" ]]; then
-            echo "App Bundle signing certificate mismatch" >&2
-            echo "expected=$expected" >&2
-            echo "actual=$actual" >&2
-            exit 1
-          fi
-          echo "Fixed App Bundle certificate verified: $actual"
-
-      - name: Attach fixed-signed artifacts to GitHub release
+      - name: Attach fixed-signed APKs to GitHub release
         if: github.event_name == 'release'
         uses: ncipollo/release-action@v1
         with:
@@ -120,14 +106,8 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           updateOnlyUnreleased: true
-          artifacts: app/build/outputs/apk/normal/release/*.apk,app/build/outputs/bundle/playRelease/*.aab
+          artifacts: app/build/outputs/apk/normal/release/*.apk,app/build/outputs/apk/play/release/*.apk
 
-      - name: Push fixed-signed bundle to Play Store
-        if: github.event_name == 'release' && !contains(github.ref, '-rc')
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-          packageName: io.github.jd1378.otphelper
-          releaseFiles: app/build/outputs/bundle/playRelease/*.aab
-          track: internal
-          status: draft
+      - name: Confirm fork-only distribution boundary
+        run: >-
+          echo "Google Play upload is intentionally disabled: this fork uses an independent signing identity and is distributed only through this repository."
