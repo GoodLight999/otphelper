@@ -126,6 +126,17 @@ requested_permissions = {
 if internal_permission_name not in requested_permissions:
     raise SystemExit("OTP Helper does not request its internal notification-action permission")
 
+# Offline operation is a product privacy contract, not merely a source-level intention.
+# Dependencies and manifest mergers must never add network permissions to a distributed APK.
+for forbidden_permission in (
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+):
+    if forbidden_permission in requested_permissions:
+        raise SystemExit(
+            f"Offline APK contract violated by requested permission: {forbidden_permission}"
+        )
+
 action_receiver = next(
     (
         receiver
