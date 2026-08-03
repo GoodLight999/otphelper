@@ -122,7 +122,7 @@ if ($password -cne $passwordConfirm) {
     throw 'The two signing passwords do not match.'
 }
 
-$validityDays = [checked]($ValidityYears * 365)
+$validityDays = $ValidityYears * 365
 $created = $false
 $keystoreBase64 = $null
 $env:OTPHELPER_KEYTOOL_PASSWORD = $password
