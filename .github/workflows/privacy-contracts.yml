@@ -1,0 +1,33 @@
+name: Privacy contracts
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify backup privacy allowlists
+        run: python3 .github/scripts/verify-backup-rules.py
+      - name: Reject committed private signing or app-data material
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden='(^|/)(otphelper-signing-output|otphelper-adb-backup)(/|$)|\.(jks|keystore)$|signing-keystore-base64.*\.txt$'
+          if git ls-files | grep -Ei "$forbidden"; then
+            echo "Private signing or migration material must not be committed" >&2
+            exit 1
+          fi
