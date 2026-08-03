@@ -6,13 +6,15 @@ PowerShell 7 helper for the one-time transition from the unrecoverable ephemeral
 
 **Do not run `Restore` until the permanent keystore is backed up, GitHub signing Secrets are configured, and a fixed-signed debuggable APK has been built.** The currently installed physical-test APK should remain installed until then.
 
+The tool requires current Android SDK Platform Tools. Certificate inspection and restore also require Android SDK Build Tools (`apksigner`) through `PATH`, `ANDROID_SDK_ROOT`, or `ANDROID_HOME`.
+
 ### Inspect the connected device
 
 ```powershell
 pwsh ./tools/otphelper-adb-migration.ps1 -Action Status
 ```
 
-Use `-Serial <adb-serial>` when more than one authorized device is connected.
+Use `-Serial <adb-serial>` when more than one authorized device is connected. Status includes the installed APK certificate SHA-256 when `apksigner` is available.
 
 ### Back up the current debuggable installation
 
@@ -34,16 +36,19 @@ Keep the complete backup directory private. It can contain app settings and OTP 
 
 ### Restore after installing the permanent-key debug APK
 
-After uninstalling the old-signature APK and installing the permanent-key **debuggable** APK:
+After uninstalling the old-signature APK and installing the permanent-key **debuggable** APK, pass the permanent certificate fingerprint pinned in the `OTPHELPER_SIGNING_CERT_SHA256` GitHub Secret:
 
 ```powershell
 pwsh ./tools/otphelper-adb-migration.ps1 `
   -Action Restore `
   -BackupDirectory ./otphelper-adb-backup `
+  -ExpectedCertificateSha256 '<64-hex permanent certificate SHA-256>' `
   -ConfirmRestore
 ```
 
-Restore verifies the archive hash, clears the fresh app data, restores files through `run-as`, removes stale WorkManager runtime state, and best-effort restores:
+Before clearing any data, Restore pulls the installed base APK, verifies it with `apksigner`, and refuses to proceed unless its signing certificate exactly matches `-ExpectedCertificateSha256`. This prevents accidentally restoring into another ephemeral-key build that cannot receive future permanent-key updates.
+
+After the certificate gate, Restore verifies the archive hash, clears the fresh app data, restores files through `run-as`, removes stale WorkManager runtime state, and best-effort restores:
 
 - `POST_NOTIFICATIONS`;
 - `RECEIVE_SMS` and `READ_SMS`, when previously granted;
