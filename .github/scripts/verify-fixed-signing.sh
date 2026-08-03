@@ -18,9 +18,9 @@ if [[ -z "$apksigner" ]]; then
   exit 1
 fi
 
-mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/debug/*.apk' -print | sort)
+mapfile -t apks < <(find app/build/outputs/apk -type f -name '*.apk' -print | sort)
 if (( ${#apks[@]} == 0 )); then
-  echo "No debug APKs were found" >&2
+  echo "No APKs were found" >&2
   exit 1
 fi
 
@@ -31,6 +31,10 @@ for apk in "${apks[@]}"; do
     | head -n 1 \
     | tr -d ':[:space:]' \
     | tr '[:upper:]' '[:lower:]')"
+
+  if "$apksigner" verify --verbose "$apk" | grep -q '^Verified using v1 scheme (JAR signing): false$'; then
+    : # v1 is optional on modern Android; the certificate check below is authoritative.
+  fi
 
   if [[ "$actual" != "$expected" ]]; then
     echo "Signing certificate mismatch: $apk" >&2
