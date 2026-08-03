@@ -15,7 +15,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jd1378.otphelper.AccessibilityNotificationService
 import io.github.jd1378.otphelper.INTENT_ACTION_SHIZUKU_REPAIR
-import io.github.jd1378.otphelper.MainActivity
+import io.github.jd1378.otphelper.InternalActionActivity
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
@@ -230,7 +230,7 @@ constructor(
 
   fun onRunShizukuRepair(context: Context) {
     context.startActivity(
-        Intent(context, MainActivity::class.java)
+        Intent(context, InternalActionActivity::class.java)
             .setAction(INTENT_ACTION_SHIZUKU_REPAIR)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
     )
