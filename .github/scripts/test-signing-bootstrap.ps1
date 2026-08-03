@@ -116,6 +116,23 @@ finally {
     Remove-Item Env:OTPHELPER_KEYTOOL_PASSWORD -ErrorAction SilentlyContinue
 }
 
+$env:OTPHELPER_KEYSTORE_PATH = $keystore
+$env:OTPHELPER_KEYSTORE_PASSWORD = $testPassword
+$env:OTPHELPER_KEY_ALIAS = 'otphelper'
+$env:OTPHELPER_SIGNING_CERT_SHA256 = $fingerprint
+try {
+    & bash ./.github/scripts/verify-signing-keystore.sh
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Permanent-keystore verifier rejected the generated JKS.'
+    }
+}
+finally {
+    Remove-Item Env:OTPHELPER_KEYSTORE_PATH -ErrorAction SilentlyContinue
+    Remove-Item Env:OTPHELPER_KEYSTORE_PASSWORD -ErrorAction SilentlyContinue
+    Remove-Item Env:OTPHELPER_KEY_ALIAS -ErrorAction SilentlyContinue
+    Remove-Item Env:OTPHELPER_SIGNING_CERT_SHA256 -ErrorAction SilentlyContinue
+}
+
 $expectedSecrets = [ordered]@{
     OTPHELPER_SIGNING_KEYSTORE_B64 = $encoded
     OTPHELPER_KEYSTORE_PASSWORD = $testPassword
@@ -142,4 +159,4 @@ foreach ($entry in $expectedSecrets.GetEnumerator()) {
     }
 }
 
-Write-Host 'Signing bootstrap verified: JKS, certificate, Base64, and exact no-newline Secret transport.'
+Write-Host 'Signing bootstrap verified: JKS, certificate, pre-build keystore check, Base64, and exact no-newline Secret transport.'
