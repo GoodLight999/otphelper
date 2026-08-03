@@ -26,7 +26,7 @@
   <string name="persistence_repair_started">標準のバックグラウンド修復を実行しました。</string>
 
   <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、未接続時だけのListener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
-  <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にしてください。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
+  <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、設定→アプリ→アプリ起動→OTP Helperで自動管理をオフにし、自動起動・他のアプリによる起動・バックグラウンド実行を許可してください。さらに履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にします。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
   <string name="permission_advanced_notification_recovery_desc">標準の通知アクセスで動作している場合、以下の機能は不要です。別アプリのOTP本文が伏字になる、または標準Listenerが接続できない場合だけ、高度な修復を開いてください。</string>
   <string name="show_advanced_notification_recovery">高度な通知修復を表示</string>
   <string name="hide_advanced_notification_recovery">高度な通知修復を隠す</string>
