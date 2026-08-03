@@ -174,7 +174,6 @@ constructor(
           AccessibilityNotificationService.isEnabled(context)
         }
       }
-      launch { _shizukuSnapshot.update { ShizukuConnectionManager.snapshot(context) } }
       launch {
         _hasSmsListenerPerm.update {
           context.checkSelfPermission(android.Manifest.permission.RECEIVE_SMS) ==
@@ -200,6 +199,12 @@ constructor(
           _hasRestrictedSettings.update { true }
         }
       }
+    }
+  }
+
+  fun updateAdvancedRecoveryStatus(context: Context) {
+    viewModelScope.launch {
+      _shizukuSnapshot.value = ShizukuConnectionManager.snapshot(context.applicationContext)
     }
   }
 
