@@ -21,4 +21,27 @@ class AppLoggerTest {
     assertFalse(redacted.contains("987654"))
     assertTrue(redacted.contains("<redacted-number>"))
   }
+
+  @Test
+  fun redactsLongPhoneNumbers() {
+    val redacted = AppLogger.redact("smsOrigin=09012345678 sender=+819012345678")
+
+    assertFalse(redacted.contains("09012345678"))
+    assertFalse(redacted.contains("819012345678"))
+    assertTrue(redacted.contains("<redacted-number>"))
+  }
+
+  @Test
+  fun doesNotTreatOtpInsidePackageNameAsASecretKey() {
+    val redacted = AppLogger.redact("package=io.github.jd1378.otphelper")
+
+    assertTrue(redacted.contains("io.github.jd1378.otphelper"))
+  }
+
+  @Test
+  fun doesNotRedactOrdinaryWordsAfterCodeKeyword() {
+    val redacted = AppLogger.redact("code detected in notification")
+
+    assertTrue(redacted.contains("code detected"))
+  }
 }
