@@ -150,6 +150,36 @@ class ResilienceManifestTest {
   }
 
   @Test
+  fun internalActionActivityIsPrivateButReachableInApp() {
+    val info =
+        packageManager.getActivityInfo(
+            ComponentName(context, InternalActionActivity::class.java),
+            PackageManager.ComponentInfoFlags.of(0),
+        )
+    assertFalse(info.exported)
+    assertTrue(info.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS != 0)
+    assertTrue(info.flags and ActivityInfo.FLAG_NO_HISTORY != 0)
+
+    val externalAttempt =
+        executeShellCommand(
+            "am start -W -n ${context.packageName}/.InternalActionActivity " +
+                "-a $INTENT_ACTION_REPAIR_BACKGROUND 2>&1")
+    assertTrue(
+        "Shell UID unexpectedly launched the private internal Activity: $externalAttempt",
+        externalAttempt.contains("Permission Denial", ignoreCase = true) ||
+            externalAttempt.contains("not exported", ignoreCase = true) ||
+            externalAttempt.contains("SecurityException", ignoreCase = true),
+    )
+
+    context.startActivity(
+        Intent(context, InternalActionActivity::class.java)
+            .setAction(INTENT_ACTION_REPAIR_BACKGROUND)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+    instrumentation.waitForIdleSync()
+  }
+
+  @Test
   fun foregroundServiceAndWatchdogCanStart() {
     val activity = launchMainActivity()
     try {
