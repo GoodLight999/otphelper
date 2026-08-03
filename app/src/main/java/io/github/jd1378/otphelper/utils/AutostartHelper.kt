@@ -7,6 +7,12 @@ import android.net.Uri
 
 class AutostartHelper {
   companion object {
+    private val OEM_MANAGER_PACKAGES =
+        listOf(
+            "com.hihonor.systemmanager",
+            "com.huawei.systemmanager",
+        )
+
     private val POWER_MANAGER_INTENTS =
         listOf(
             // HONOR MagicOS. Activity names vary by generation and region.
@@ -104,22 +110,43 @@ class AutostartHelper {
     fun openAutostartSettings(context: Context) {
       for (template in POWER_MANAGER_INTENTS) {
         val intent = Intent(template).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (ActivityHelper.isCallable(context, intent)) {
-          try {
-            context.startActivity(intent)
-            return
-          } catch (error: Throwable) {
-            AppLogger.w(
-                "AutostartHelper",
-                "Unable to open ${intent.component?.flattenToShortString()}: ${error.javaClass.simpleName}",
-            )
-          }
-        }
+        if (openIfCallable(context, intent, "OEM app-launch settings")) return
       }
-      AppLogger.w("AutostartHelper", "No callable OEM app-launch settings activity was found")
+
+      // Current MagicOS builds may expose an Activity in package metadata but reject third-party
+      // launches with a runtime SecurityException. Opening System Manager itself still gives the
+      // user a useful route to App launch instead of leaving the button apparently unresponsive.
+      for (intent in managerLaunchIntents(context)) {
+        if (openIfCallable(context, intent, "OEM system manager fallback")) return
+      }
+
+      AppLogger.w("AutostartHelper", "No callable OEM app-launch settings or manager was found")
     }
 
     fun hasAutostartSettings(context: Context): Boolean =
-        POWER_MANAGER_INTENTS.any { ActivityHelper.isCallable(context, Intent(it)) }
+        POWER_MANAGER_INTENTS.any { ActivityHelper.isCallable(context, Intent(it)) } ||
+            managerLaunchIntents(context).any { ActivityHelper.isCallable(context, it) }
+
+    private fun managerLaunchIntents(context: Context): List<Intent> =
+        OEM_MANAGER_PACKAGES.mapNotNull { packageName ->
+          context.packageManager
+              .getLaunchIntentForPackage(packageName)
+              ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+    private fun openIfCallable(context: Context, intent: Intent, description: String): Boolean {
+      if (!ActivityHelper.isCallable(context, intent)) return false
+      return try {
+        context.startActivity(intent)
+        true
+      } catch (error: Throwable) {
+        AppLogger.w(
+            "AutostartHelper",
+            "Unable to open $description ${intent.component?.flattenToShortString()}: " +
+                error.javaClass.simpleName,
+        )
+        false
+      }
+    }
   }
 }
