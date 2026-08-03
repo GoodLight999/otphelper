@@ -2,7 +2,7 @@
 
 OTP Helper handles two materially different classes of local data:
 
-1. user configuration, including phrase lists and behavior settings;
+1. user configuration stored in protobuf DataStore;
 2. detected-code history stored in the Room database.
 
 The Android backup policy intentionally treats them differently.
@@ -11,13 +11,17 @@ The Android backup policy intentionally treats them differently.
 
 Only files below the app-private `files/datastore/` directory are included in Android Auto Backup and device-to-device transfer.
 
-This contains the protobuf DataStore user settings, including:
+This preserves the complete protobuf DataStore settings object, including:
 
 - sensitive/code-detection phrases;
 - ignored/exclusion phrases;
 - cleanup/removal phrases;
-- mode and behavior settings;
-- setup and UI preferences.
+- notification or SMS mode;
+- clipboard, result-notification, history, dismissal, mark-as-read, and broadcast settings;
+- setup and UI preferences;
+- the text last entered on the Detection Test screen.
+
+The Detection Test screen deliberately restores its previous text across app restarts, so that field is part of DataStore rather than Room history. A complete in-app phrase export does not include it.
 
 Cloud backup on Android 12+ is disabled when the device lacks client-side backup encryption capabilities.
 
@@ -42,11 +46,13 @@ The policy is the same on both Android backup-rule formats:
 
 Android 12+ defines cloud backup and device-to-device transfer separately. OTP Helper explicitly allows only `file/datastore/.` in both sections. Omitting the device-transfer section would allow the platform default to include substantially more app data, so both sections must remain present.
 
+An `<include>` rule changes Android's broad default behavior into an allowlist. No database directory is included.
+
 ## Manual phrase backup
 
 The in-app individual and complete phrase-list export features are separate from Android system backup. They produce user-selected files through the Storage Access Framework and are the preferred portable, inspectable backup for phrase lists.
 
-A complete phrase backup does not contain OTP history or unrelated app settings.
+A complete phrase backup contains only the three phrase lists. It does not contain OTP history, Detection Test text, or unrelated app settings.
 
 ## Signing-transition ADB backup
 
