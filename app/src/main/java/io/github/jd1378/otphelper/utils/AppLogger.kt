@@ -19,8 +19,9 @@ object AppLogger {
   private const val MAX_LOG_BYTES = 512 * 1024L
   private const val MAX_EXPORTED_CHARS = 120_000
   private val keyedSecretPattern =
-      Regex("(?i)(code|otp|pin)(\\s*[:=]?\\s*)[A-Za-z0-9-]{4,12}")
-  private val standaloneNumberPattern = Regex("(?<![A-Za-z0-9])\\d{4,10}(?![A-Za-z0-9])")
+      Regex(
+          "(?i)\\b(code|otp|pin)\\b(\\s*[:=]\\s*|\\s+)([A-Za-z0-9-]*\\d[A-Za-z0-9-]{3,31})")
+  private val standaloneNumberPattern = Regex("(?<![A-Za-z0-9])\\d{4,}(?![A-Za-z0-9])")
 
   private val executor = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "otphelper-file-logger").apply { isDaemon = true }
@@ -31,26 +32,14 @@ object AppLogger {
     appContext = context.applicationContext
   }
 
-  fun d(scope: String, message: String) {
-    Log.d(TAG, "[$scope] $message")
-    persist("D", scope, message, null)
-  }
+  fun d(scope: String, message: String) = log("D", scope, message, null)
 
-  fun i(scope: String, message: String) {
-    Log.i(TAG, "[$scope] $message")
-    persist("I", scope, message, null)
-  }
+  fun i(scope: String, message: String) = log("I", scope, message, null)
 
-  fun w(scope: String, message: String) {
-    Log.w(TAG, "[$scope] $message")
-    persist("W", scope, message, null)
-  }
+  fun w(scope: String, message: String) = log("W", scope, message, null)
 
-  fun e(scope: String, message: String, throwable: Throwable? = null) {
-    if (throwable != null) Log.e(TAG, "[$scope] $message", throwable)
-    else Log.e(TAG, "[$scope] $message")
-    persist("E", scope, message, throwable)
-  }
+  fun e(scope: String, message: String, throwable: Throwable? = null) =
+      log("E", scope, message, throwable)
 
   fun readRecent(context: Context): String {
     val directory = File(context.filesDir, LOG_DIRECTORY)
@@ -63,10 +52,23 @@ object AppLogger {
         .takeLast(MAX_EXPORTED_CHARS)
   }
 
-  private fun persist(level: String, scope: String, message: String, throwable: Throwable?) {
-    val context = appContext ?: return
+  private fun log(level: String, scope: String, message: String, throwable: Throwable?) {
     val safeMessage = redact(message)
     val safeStack = throwable?.let(::stackTrace)?.let(::redact)
+    val logcatMessage =
+        if (safeStack.isNullOrBlank()) "[$scope] $safeMessage"
+        else "[$scope] $safeMessage\n$safeStack"
+    when (level) {
+      "D" -> Log.d(TAG, logcatMessage)
+      "I" -> Log.i(TAG, logcatMessage)
+      "W" -> Log.w(TAG, logcatMessage)
+      else -> Log.e(TAG, logcatMessage)
+    }
+    persist(level, scope, safeMessage, safeStack)
+  }
+
+  private fun persist(level: String, scope: String, safeMessage: String, safeStack: String?) {
+    val context = appContext ?: return
     executor.execute {
       runCatching {
         val directory = File(context.filesDir, LOG_DIRECTORY).apply { mkdirs() }
