@@ -2,6 +2,7 @@ package io.github.jd1378.otphelper
 
 import android.Manifest
 import android.app.ActivityManager
+import android.app.PendingIntent
 import android.app.UiAutomation
 import android.content.ComponentName
 import android.content.Context
@@ -107,6 +108,17 @@ class ResilienceManifestTest {
     assertEquals("android.permission.INTERACT_ACROSS_USERS_FULL", shizukuProvider.readPermission)
     assertEquals("${context.packageName}.shizuku", shizukuProvider.authority)
 
+    val actionReceiver =
+        packageManager.getReceiverInfo(
+            ComponentName(context, NotifActionReceiver::class.java),
+            PackageManager.ComponentInfoFlags.of(0),
+        )
+    assertFalse(actionReceiver.exported)
+    assertEquals(
+        "io.github.jd1378.otphelper.permission.BROADCAST_CODE",
+        actionReceiver.permission,
+    )
+
     val bootReceiver =
         packageManager.getReceiverInfo(
             ComponentName(context, BootReceiver::class.java),
@@ -120,6 +132,21 @@ class ResilienceManifestTest {
             PackageManager.ComponentInfoFlags.of(0),
         )
     assertFalse(watchdogReceiver.exported)
+  }
+
+  @Test
+  fun privateNotificationActionReceiverAcceptsExplicitPendingIntent() {
+    val pendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            0x4f54,
+            Intent(context, NotifActionReceiver::class.java)
+                .setAction(NotifActionReceiver.INTENT_ACTION_CODE_COPY),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+    pendingIntent.send()
+    instrumentation.waitForIdleSync()
   }
 
   @Test
