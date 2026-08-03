@@ -27,14 +27,17 @@
   <string name="persistence_repair">Repair</string>
   <string name="persistence_repair_started">Standard background repair was requested.</string>
 
-  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, listener rebind heartbeat, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
+  <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, disconnected-only listener repair, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
+  <string name="permission_advanced_notification_recovery_desc">When standard notification access works, the options below are unnecessary. Open advanced recovery only if another app's OTP text is redacted or the standard listener cannot stay connected.</string>
+  <string name="show_advanced_notification_recovery">Show advanced notification recovery</string>
+  <string name="hide_advanced_notification_recovery">Hide advanced notification recovery</string>
   <string name="accessibility_service_label">OTP notification reader</string>
   <string name="accessibility_service_description">Reads only Android notification accessibility events to detect one-time codes. It does not inspect windows, perform gestures, read key input, or take screenshots. While the device is locked, Android may provide only the notification public version.</string>
   <string name="permission_todo_accessibility_notifications">Enable notification reading through Accessibility events</string>
   <string name="permission_accessibility_notification_desc">Optional second notification-reading path defined by Android\'s public Accessibility API. Android 16 still exposes TYPE_NOTIFICATION_STATE_CHANGED and its Notification parcelable. For a locked device, a non-public notification may be replaced with its public version. This service requests no window content, gestures, key events, or screenshots.</string>
 
-  <string name="permission_shizuku_notification_desc">Optional repair for Android 15 and later. Using the official Shizuku API, OTP Helper applies the RECEIVE_SENSITIVE_NOTIFICATIONS AppOp as shell/root and toggles notification-listener access so Android refreshes its trusted-listener cache. It is not required for Accessibility notification events or SMS mode.</string>
+  <string name="permission_shizuku_notification_desc">Optional repair for Android 15 and later. Using the official Shizuku API, OTP Helper applies the RECEIVE_SENSITIVE_NOTIFICATIONS AppOp as shell/root and toggles notification-listener access so Android refreshes its trusted-listener cache. It is unnecessary when standard notification access already exposes the text, and is not required for Accessibility notification events or SMS mode.</string>
   <string name="permission_shizuku_status">Shizuku: manager %1$s / Binder %2$s / permission %3$s</string>
   <string name="permission_shizuku_installed">installed</string>
   <string name="permission_shizuku_not_installed">not installed</string>
