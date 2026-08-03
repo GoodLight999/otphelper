@@ -6,12 +6,21 @@ import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.CodeExtractor
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
+private data class ListenerSettingsSnapshot(
+    val codeExtractor: CodeExtractor? = null,
+    val isAutoDismissEnabled: Boolean = false,
+    val isAutoMarkAsReadEnabled: Boolean = false,
+    val modeOfOperation: ModeOfOperation = ModeOfOperation.UNRECOGNIZED,
+)
 
 @Singleton
 @Stable
@@ -20,6 +29,7 @@ class AutoUpdatingListenerUtils
 constructor(private val userSettingsRepository: UserSettingsRepository) {
   companion object {
     const val TAG = "AutoUpdatingCodeExtractor"
+    private const val INITIAL_SETTINGS_TIMEOUT_SECONDS = 5L
   }
 
   private val exceptionHandler = CoroutineExceptionHandler { _, exception ->
@@ -28,41 +38,55 @@ constructor(private val userSettingsRepository: UserSettingsRepository) {
 
   private val scope = CoroutineScope(Dispatchers.IO + exceptionHandler)
   private val latch = CountDownLatch(1)
+  private val snapshot = AtomicReference(ListenerSettingsSnapshot())
 
-  var codeExtractor: CodeExtractor? = null
-    private set
+  val codeExtractor: CodeExtractor?
+    get() = snapshot.get().codeExtractor
 
-  var isAutoDismissEnabled: Boolean = false
-    private set
+  val isAutoDismissEnabled: Boolean
+    get() = snapshot.get().isAutoDismissEnabled
 
-  var isAutoMarkAsReadEnabled: Boolean = false
-    private set
+  val isAutoMarkAsReadEnabled: Boolean
+    get() = snapshot.get().isAutoMarkAsReadEnabled
 
-  var modeOfOperation = ModeOfOperation.UNRECOGNIZED
-    private set
+  val modeOfOperation: ModeOfOperation
+    get() = snapshot.get().modeOfOperation
 
   init {
     scope.launch {
-      userSettingsRepository.userSettings.collect {
-        codeExtractor =
-            CodeExtractor(it.sensitivePhrasesList, it.ignoredPhrasesList, it.cleanupPhrasesList)
-        isAutoDismissEnabled = it.isAutoDismissEnabled
-        isAutoMarkAsReadEnabled = it.isAutoMarkAsReadEnabled
-        modeOfOperation = it.modeOfOperation
+      userSettingsRepository.userSettings.collect { settings ->
+        val updated =
+            ListenerSettingsSnapshot(
+                codeExtractor =
+                    CodeExtractor(
+                        settings.sensitivePhrasesList,
+                        settings.ignoredPhrasesList,
+                        settings.cleanupPhrasesList,
+                    ),
+                isAutoDismissEnabled = settings.isAutoDismissEnabled,
+                isAutoMarkAsReadEnabled = settings.isAutoMarkAsReadEnabled,
+                modeOfOperation = settings.modeOfOperation,
+            )
+        snapshot.set(updated)
+        latch.countDown()
         AppLogger.i(
             TAG,
-            "settings updated: mode=$modeOfOperation, " +
-                "autoDismiss=$isAutoDismissEnabled, autoMarkAsRead=$isAutoMarkAsReadEnabled, " +
-                "sensitivePhrases=${it.sensitivePhrasesList.size}, " +
-                "ignoredPhrases=${it.ignoredPhrasesList.size}, " +
-                "cleanupPhrases=${it.cleanupPhrasesList.size}",
+            "settings updated: mode=${updated.modeOfOperation}, " +
+                "autoDismiss=${updated.isAutoDismissEnabled}, " +
+                "autoMarkAsRead=${updated.isAutoMarkAsReadEnabled}, " +
+                "sensitivePhrases=${settings.sensitivePhrasesList.size}, " +
+                "ignoredPhrases=${settings.ignoredPhrasesList.size}, " +
+                "cleanupPhrases=${settings.cleanupPhrasesList.size}",
         )
-        latch.countDown() // Release the latch
       }
     }
   }
 
-  fun awaitCodeExtractor() {
-    latch.await()
+  fun awaitCodeExtractor(): Boolean {
+    val ready = latch.await(INITIAL_SETTINGS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+    if (!ready) {
+      AppLogger.w(TAG, "initial listener settings did not load within the timeout")
+    }
+    return ready
   }
 }
