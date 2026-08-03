@@ -105,8 +105,20 @@ internal_permission = next(
 )
 if internal_permission is None:
     raise SystemExit("Internal notification-action permission is not declared")
-if internal_permission.get(android + "protectionLevel") != "signature":
-    raise SystemExit("Internal notification-action permission must be signature-protected")
+
+# apkanalyzer may render manifest enum values symbolically ("signature") or as
+# their compiled integer form ("0x2"). Android's PROTECTION_SIGNATURE constant
+# is 2, so both representations describe the same signature-only permission.
+protection_level = internal_permission.get(android + "protectionLevel")
+try:
+    protection_level_is_signature = int(protection_level or "", 0) == 0x2
+except ValueError:
+    protection_level_is_signature = protection_level == "signature"
+if not protection_level_is_signature:
+    raise SystemExit(
+        "Internal notification-action permission must be signature-protected "
+        f"(actual: {protection_level!r})"
+    )
 
 requested_permissions = {
     element.get(android + "name") for element in root.findall("uses-permission")
