@@ -16,7 +16,6 @@ class PersistenceWatchdogWorker(
   override suspend fun doWork(): Result {
     AppLogger.i("PersistenceWatchdog", "watchdog tick")
     PersistenceService.start(applicationContext)
-    PersistenceService.requestListenerRebind(applicationContext)
     MyWorkManager.rebindListeners(applicationContext, true)
     return Result.success()
   }
