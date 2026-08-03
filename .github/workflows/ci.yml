@@ -19,9 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Validate GitHub Actions workflows
-        uses: docker://rhysd/actionlint:1.7.7
+        uses: docker://rhysd/actionlint:1.7.12
       - name: Validate PowerShell maintenance tools
         shell: pwsh
         run: |
@@ -44,11 +46,10 @@ jobs:
             throw 'One or more PowerShell maintenance tools failed syntax validation.'
           }
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
       - name: Smoke test permanent signing bootstrap
         shell: pwsh
         env:
@@ -107,7 +108,9 @@ jobs:
             Remove-Item Env:OTPHELPER_KEYTOOL_PASSWORD -ErrorAction SilentlyContinue
           }
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
       - name: Grant execute permission
         run: chmod +x gradlew .github/scripts/*.sh
       - name: Prepare fixed distribution signing key
@@ -163,7 +166,7 @@ jobs:
           echo "Installable artifact upload intentionally disabled: fixed signing secrets are not configured."
       - name: Upload fixed-signed installable APKs
         if: success() && steps.signing.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: otphelper-magic-os-fixed-signed-apks
           path: app/build/outputs/apk/**/debug/*.apk
@@ -171,7 +174,7 @@ jobs:
           retention-days: 30
       - name: Upload verification reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-static-reports
           path: |
@@ -188,15 +191,18 @@ jobs:
       matrix:
         api-level: [35, 36]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
       - name: Grant execute permission
         run: chmod +x gradlew .github/scripts/*.sh
       - name: Enable KVM
@@ -219,7 +225,7 @@ jobs:
           script: .github/scripts/run-emulator-tests.sh
       - name: Upload emulator reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-emulator-reports-api-${{ matrix.api-level }}
           path: |
