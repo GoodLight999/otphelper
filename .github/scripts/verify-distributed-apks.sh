@@ -211,6 +211,10 @@ action_receiver = next(
 )
 if action_receiver is None:
     raise SystemExit("NotifActionReceiver is missing")
+if action_receiver.get(android + "exported") != "false":
+    raise SystemExit("NotifActionReceiver must remain private (exported=false)")
+if action_receiver.findall("intent-filter"):
+    raise SystemExit("Private NotifActionReceiver must use explicit PendingIntents, not filters")
 if action_receiver.get(android + "permission") != internal_permission_name:
     raise SystemExit("NotifActionReceiver is not protected by the signature permission")
 PY
