@@ -52,6 +52,12 @@ class PersistenceService : Service() {
       }
     }
 
+    private fun requestListenerRebindIfDisconnected(context: Context) {
+      if (!NotificationListener.isNotificationListenerServiceEnabled(context)) return
+      if (MonitoringHealthStore.snapshot(context).listenerConnected) return
+      requestListenerRebind(context)
+    }
+
     fun scheduleRestart(context: Context, delayMs: Long = RESTART_DELAY_MS) {
       try {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
@@ -79,7 +85,7 @@ class PersistenceService : Service() {
   private val heartbeat =
       object : Runnable {
         override fun run() {
-          requestListenerRebind(this@PersistenceService)
+          requestListenerRebindIfDisconnected(this@PersistenceService)
           updateNotification()
           handler.postDelayed(this, HEARTBEAT_MS)
         }
@@ -95,7 +101,7 @@ class PersistenceService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     AppLogger.i(TAG, "onStartCommand action=${intent?.action}, flags=$flags, startId=$startId")
-    requestListenerRebind(this)
+    requestListenerRebindIfDisconnected(this)
     updateNotification()
     return START_STICKY
   }
@@ -158,8 +164,7 @@ class PersistenceService : Service() {
     val status =
         when {
           health.listenerConnected -> R.string.persistence_notification_listener_ok
-          health.accessibilityConnected ->
-              R.string.persistence_notification_accessibility_ok
+          health.accessibilityConnected -> R.string.persistence_notification_accessibility_ok
           !permissionGranted -> R.string.persistence_notification_permission_missing
           else -> R.string.persistence_notification_listener_stalled
         }
