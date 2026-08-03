@@ -131,7 +131,9 @@ foreach ($entry in $expectedSecrets.GetEnumerator()) {
     }
     $actualBytes = [System.IO.File]::ReadAllBytes($valuePath)
     $expectedBytes = [System.Text.Encoding]::UTF8.GetBytes([string]$entry.Value)
-    if (-not $actualBytes.AsSpan().SequenceEqual($expectedBytes)) {
+    $actualEncoded = [Convert]::ToBase64String($actualBytes)
+    $expectedEncoded = [Convert]::ToBase64String($expectedBytes)
+    if ($actualBytes.Length -ne $expectedBytes.Length -or $actualEncoded -cne $expectedEncoded) {
         throw "Secret $($entry.Key) changed in transit or gained a trailing newline."
     }
     $repository = [System.IO.File]::ReadAllText($repositoryPath)
