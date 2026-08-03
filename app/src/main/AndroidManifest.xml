@@ -112,19 +112,11 @@
           android:value="true" />
     </service>
 
+    <!-- All notification actions use explicit PendingIntents targeting this private receiver. -->
     <receiver
         android:name=".NotifActionReceiver"
-        android:exported="true"
-        android:permission="io.github.jd1378.otphelper.permission.BROADCAST_CODE">
-      <intent-filter>
-        <action android:name="io.github.jd1378.otphelper.actions.code_copy" />
-        <action android:name="io.github.jd1378.otphelper.actions.ignore_notif_app" />
-        <action android:name="io.github.jd1378.otphelper.actions.ignore_notif_tag" />
-        <action android:name="io.github.jd1378.otphelper.actions.ignore_notif_nid" />
-        <action android:name="io.github.jd1378.otphelper.actions.ignore_sms_origin" />
-        <action android:name="io.github.jd1378.otphelper.actions.show_details" />
-      </intent-filter>
-    </receiver>
+        android:exported="false"
+        android:permission="io.github.jd1378.otphelper.permission.BROADCAST_CODE" />
 
     <receiver
         android:name=".BootReceiver"
