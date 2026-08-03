@@ -41,25 +41,28 @@ constructor(
     val silent = inputData.getBoolean("silent", false)
     PersistenceService.start(applicationContext)
 
-    if (userSettings.modeOfOperation == ModeOfOperation.SMS) {
-      if (hasSmsPermission(applicationContext)) {
-        // SmsListener is a manifest BroadcastReceiver, not a Service. Re-enabling its component is
-        // the valid repair operation; startService() against it always fails.
-        SmsListener.disable(applicationContext)
-        SmsListener.enable(applicationContext)
-        AppLogger.i(TAG, "SMS receiver component refreshed")
-      } else if (!silent) {
-        NotificationHelper.sendSmsPermissionRevokedNotif(applicationContext)
+    when (userSettings.modeOfOperation) {
+      ModeOfOperation.SMS -> {
+        if (hasSmsPermission(applicationContext)) {
+          // SmsListener is a manifest BroadcastReceiver, not a Service. Re-enabling its component is
+          // the valid repair operation; startService() against it always fails.
+          SmsListener.disable(applicationContext)
+          SmsListener.enable(applicationContext)
+          AppLogger.i(TAG, "SMS receiver component refreshed")
+        } else if (!silent) {
+          NotificationHelper.sendSmsPermissionRevokedNotif(applicationContext)
+        }
       }
-    } else {
-      SmsListener.disable(applicationContext)
-    }
-
-    if (isNotificationListenerServiceEnabled(applicationContext)) {
-      PersistenceService.requestListenerRebind(applicationContext)
-      AppLogger.i(TAG, "notification listener rebind requested")
-    } else if (!silent) {
-      NotificationHelper.sendPermissionRevokedNotif(applicationContext)
+      ModeOfOperation.Notification -> {
+        SmsListener.disable(applicationContext)
+        if (isNotificationListenerServiceEnabled(applicationContext)) {
+          PersistenceService.requestListenerRebind(applicationContext)
+          AppLogger.i(TAG, "notification listener rebind requested")
+        } else if (!silent) {
+          NotificationHelper.sendPermissionRevokedNotif(applicationContext)
+        }
+      }
+      else -> AppLogger.w(TAG, "unsupported mode, no listener repair performed")
     }
     return Result.success()
   }
