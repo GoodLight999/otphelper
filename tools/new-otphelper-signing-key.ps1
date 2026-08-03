@@ -44,10 +44,45 @@ function Set-GitHubSecretFromText {
         [Parameter(Mandatory)][string]$TargetRepository
     )
 
-    $Value | & $GhPath secret set $Name --repo $TargetRepository
-    if ($LASTEXITCODE -ne 0) {
-        throw "gh secret set failed for $Name."
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $GhPath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Environment['GH_PROMPT_DISABLED'] = '1'
+    foreach ($argument in @('secret', 'set', $Name, '--repo', $TargetRepository)) {
+        [void]$startInfo.ArgumentList.Add($argument)
     }
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) {
+        throw "Unable to start GitHub CLI while configuring $Name."
+    }
+
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    try {
+        # Write the exact value. PowerShell's normal pipeline appends a record terminator, which is
+        # unacceptable for keystore passwords and other byte-sensitive signing inputs.
+        $process.StandardInput.Write($Value)
+        $process.StandardInput.Close()
+        $process.WaitForExit()
+        $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
+        $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+        if ($process.ExitCode -ne 0) {
+            throw "gh secret set failed for $Name ($($process.ExitCode)):`n$stdout`n$stderr"
+        }
+    }
+    finally {
+        if (-not $process.HasExited) {
+            $process.Kill($true)
+        }
+        $process.Dispose()
+    }
+
     Write-Host "PASS GitHub Secret configured: $Name"
 }
 
