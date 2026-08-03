@@ -41,20 +41,27 @@ sealed interface Event {
 
 const val OTPHELPER_APP_SCHEME = "otphelper"
 
+internal fun buildDeepLinkIntent(
+    context: Context,
+    route: String,
+    navArgValue: String? = null,
+): Intent {
+  var baseUri = "$OTPHELPER_APP_SCHEME://$route"
+  if (!navArgValue.isNullOrEmpty()) {
+    baseUri += "/$navArgValue"
+  }
+  return Intent(context, MainActivity::class.java)
+      .setAction(Intent.ACTION_VIEW)
+      .setData(baseUri.toUri())
+      .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+}
+
 fun getDeepLinkPendingIntent(
   context: Context,
   route: String,
   navArgValue: String? = null,
 ): PendingIntent {
-  var baseUri = "$OTPHELPER_APP_SCHEME://$route"
-  if (!navArgValue.isNullOrEmpty()) {
-    baseUri += "/$navArgValue"
-  }
-  val routeIntent =
-      Intent(context, MainActivity::class.java)
-          .setAction(Intent.ACTION_VIEW)
-          .setData(baseUri.toUri())
-          .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+  val routeIntent = buildDeepLinkIntent(context, route, navArgValue)
   val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
 
   val options = ActivityOptions.makeBasic()
