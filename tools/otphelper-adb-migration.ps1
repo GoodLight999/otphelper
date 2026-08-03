@@ -15,6 +15,9 @@ $ErrorActionPreference = 'Stop'
 
 $Package = 'io.github.jd1378.otphelper'
 $ListenerComponent = "$Package/$Package.NotificationListener"
+$ListenerComponentShort = "$Package/.NotificationListener"
+$AccessibilityComponent = "$Package/$Package.AccessibilityNotificationService"
+$AccessibilityComponentShort = "$Package/.AccessibilityNotificationService"
 $ArchiveName = 'app-data.tar'
 $MetadataName = 'metadata.json'
 $PackageDumpName = 'package-dump.txt'
@@ -124,9 +127,21 @@ function Test-PermissionGranted {
     return $result.StdOut -eq 'granted'
 }
 
+function Test-ComponentInSetting {
+    param(
+        [Parameter(Mandatory)][string]$Setting,
+        [Parameter(Mandatory)][string[]]$AcceptedComponents
+    )
+    $value = (Invoke-AdbText -Arguments @('shell', 'settings', 'get', 'secure', $Setting) -AllowFailure).StdOut
+    $components = @($value -split ':' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    return @($AcceptedComponents | Where-Object { $components -contains $_ }).Count -gt 0
+}
+
 function Test-ListenerEnabled {
-    $listeners = (Invoke-AdbText -Arguments @('shell', 'settings', 'get', 'secure', 'enabled_notification_listeners') -AllowFailure).StdOut
-    return $listeners -split ':' -contains $ListenerComponent
+    return Test-ComponentInSetting 'enabled_notification_listeners' @(
+        $ListenerComponent,
+        $ListenerComponentShort
+    )
 }
 
 function Test-SensitiveAppOpAllowed {
@@ -139,13 +154,17 @@ function Test-SensitiveAppOpAllowed {
 
 function Test-BatteryWhitelist {
     $result = Invoke-AdbText -Arguments @('shell', 'cmd', 'deviceidle', 'whitelist') -AllowFailure
-    return ($result.StdOut -split "`r?`n") -contains $Package
+    $escapedPackage = [regex]::Escape($Package)
+    return @($result.StdOut -split "`r?`n" | Where-Object {
+        $_ -match "(^|,)$escapedPackage(,|$)"
+    }).Count -gt 0
 }
 
 function Test-AccessibilityEnabled {
-    $component = "$Package/$Package.AccessibilityNotificationService"
-    $services = (Invoke-AdbText -Arguments @('shell', 'settings', 'get', 'secure', 'enabled_accessibility_services') -AllowFailure).StdOut
-    return $services -split ':' -contains $component
+    return Test-ComponentInSetting 'enabled_accessibility_services' @(
+        $AccessibilityComponent,
+        $AccessibilityComponentShort
+    )
 }
 
 function Save-AppArchive {
@@ -208,6 +227,12 @@ function Invoke-BestEffort {
     }
 }
 
+function Start-OtpHelperBestEffort {
+    Invoke-BestEffort 'Launch OTP Helper' @(
+        'shell', 'am', 'start', '-n', "$Package/$Package.MainActivity"
+    )
+}
+
 Assert-OneDevice
 Assert-PackageInstalled
 
@@ -241,34 +266,42 @@ switch ($Action) {
 
         Write-Host 'Force-stopping OTP Helper so DataStore and Room files are consistent...'
         [void](Invoke-AdbText -Arguments @('shell', 'am', 'force-stop', $Package))
+        try {
+            Write-Host 'Streaming private app data through run-as...'
+            Save-AppArchive -ArchivePath $archivePath
 
-        Write-Host 'Streaming private app data through run-as...'
-        Save-AppArchive -ArchivePath $archivePath
+            $packageDump = Get-AdbText @('shell', 'dumpsys', 'package', $Package)
+            [System.IO.File]::WriteAllText(
+                $packageDumpPath,
+                $packageDump,
+                [System.Text.UTF8Encoding]::new($false)
+            )
 
-        $packageDump = Get-AdbText @('shell', 'dumpsys', 'package', $Package)
-        [System.IO.File]::WriteAllText($packageDumpPath, $packageDump, [System.Text.UTF8Encoding]::new($false))
+            $metadata = [ordered]@{
+                schema = 'otphelper.adb-migration'
+                version = 1
+                createdAt = [DateTimeOffset]::Now.ToString('o')
+                deviceSerial = $deviceSerial
+                fingerprint = $fingerprint
+                package = $Package
+                notificationListenerEnabled = Test-ListenerEnabled
+                sensitiveNotificationAppOpAllowed = Test-SensitiveAppOpAllowed
+                batteryOptimizationExempt = Test-BatteryWhitelist
+                postNotificationsGranted = Test-PermissionGranted 'android.permission.POST_NOTIFICATIONS'
+                receiveSmsGranted = Test-PermissionGranted 'android.permission.RECEIVE_SMS'
+                readSmsGranted = Test-PermissionGranted 'android.permission.READ_SMS'
+                accessibilityNotificationServiceEnabled = Test-AccessibilityEnabled
+                archiveSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding utf8NoBOM
 
-        $metadata = [ordered]@{
-            schema = 'otphelper.adb-migration'
-            version = 1
-            createdAt = [DateTimeOffset]::Now.ToString('o')
-            deviceSerial = $deviceSerial
-            fingerprint = $fingerprint
-            package = $Package
-            notificationListenerEnabled = Test-ListenerEnabled
-            sensitiveNotificationAppOpAllowed = Test-SensitiveAppOpAllowed
-            batteryOptimizationExempt = Test-BatteryWhitelist
-            postNotificationsGranted = Test-PermissionGranted 'android.permission.POST_NOTIFICATIONS'
-            receiveSmsGranted = Test-PermissionGranted 'android.permission.RECEIVE_SMS'
-            readSmsGranted = Test-PermissionGranted 'android.permission.READ_SMS'
-            accessibilityNotificationServiceEnabled = Test-AccessibilityEnabled
-            archiveSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "Backup complete: $BackupDirectory"
+            Write-Host "Archive SHA-256: $($metadata.archiveSha256)"
+            Write-Warning 'Keep the current APK installed until the permanent signing key and a fixed-signed DEBUG APK are ready.'
         }
-        $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding utf8NoBOM
-
-        Write-Host "Backup complete: $BackupDirectory"
-        Write-Host "Archive SHA-256: $($metadata.archiveSha256)"
-        Write-Warning 'Keep the current APK installed until the permanent signing key and a fixed-signed DEBUG APK are ready.'
+        finally {
+            Start-OtpHelperBestEffort
+        }
     }
 
     'Restore' {
@@ -290,6 +323,9 @@ switch ($Action) {
         if ($metadata.schema -ne 'otphelper.adb-migration' -or $metadata.version -ne 1) {
             throw 'Unsupported OTP Helper ADB backup metadata.'
         }
+        if ($metadata.package -ne $Package) {
+            throw "Backup package mismatch: $($metadata.package)"
+        }
         $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actualHash -ne $metadata.archiveSha256) {
             throw "Backup archive SHA-256 mismatch. Expected $($metadata.archiveSha256), got $actualHash."
@@ -301,7 +337,16 @@ switch ($Action) {
 
         Write-Host 'Restoring private app data through run-as...'
         Restore-AppArchive -ArchivePath $archivePath
-        [void](Invoke-AdbText -Arguments @('shell', 'run-as', $Package, 'rm', '-rf', 'cache', 'code_cache') -AllowFailure)
+        [void](Invoke-AdbText -Arguments @(
+            'shell', 'run-as', $Package, 'rm', '-rf', 'cache', 'code_cache'
+        ) -AllowFailure)
+        [void](Invoke-AdbText -Arguments @(
+            'shell', 'run-as', $Package, 'rm', '-f',
+            'no_backup/androidx.work.workdb',
+            'no_backup/androidx.work.workdb-shm',
+            'no_backup/androidx.work.workdb-wal',
+            'no_backup/androidx.work.workdb-journal'
+        ) -AllowFailure)
 
         if ($metadata.postNotificationsGranted) {
             Invoke-BestEffort 'Restore POST_NOTIFICATIONS' @('shell', 'pm', 'grant', $Package, 'android.permission.POST_NOTIFICATIONS')
@@ -329,9 +374,7 @@ switch ($Action) {
             )
         }
 
-        Invoke-BestEffort 'Launch OTP Helper after restore' @(
-            'shell', 'am', 'start', '-n', "$Package/$Package.MainActivity"
-        )
+        Start-OtpHelperBestEffort
 
         Write-Host 'Private data restore completed.'
         Write-Warning 'MagicOS App launch switches, Recents lock, and Shizuku client permission may still require manual confirmation.'
