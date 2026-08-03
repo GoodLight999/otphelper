@@ -21,7 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.PendingIntentCompat
 import io.github.jd1378.otphelper.INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS
-import io.github.jd1378.otphelper.MainActivity
+import io.github.jd1378.otphelper.InternalActionActivity
 import io.github.jd1378.otphelper.NotifActionReceiver
 import io.github.jd1378.otphelper.R
 import io.github.jd1378.otphelper.getDeepLinkPendingIntent
@@ -46,32 +46,26 @@ class NotificationHelper {
 
     private fun createPermissionRevokedChannel(context: Context): String {
       val channelId = context.getString(R.string.permission_revoked_channel_id)
-      // Create the NotificationChannel only on API 26+
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val name = context.getString(R.string.permission_revoked)
         val descriptionText = context.getString(R.string.permission_revoked_channel_description)
         val importance = NotificationManager.IMPORTANCE_HIGH
         val channel =
             NotificationChannel(channelId, name, importance).apply { description = descriptionText }
-        // Register the channel with the system
-        val notificationManager = NotificationManagerCompat.from(context)
-        notificationManager.createNotificationChannel(channel)
+        NotificationManagerCompat.from(context).createNotificationChannel(channel)
       }
       return channelId
     }
 
     private fun createDetectedChannel(context: Context): String {
       val channelId = context.getString(R.string.code_detected_channel_id)
-      // Create the NotificationChannel only on API 26+
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val name = context.getString(R.string.code_detected_channel_name)
         val descriptionText = context.getString(R.string.code_detected_channel_description)
         val importance = NotificationManager.IMPORTANCE_HIGH
         val channel =
             NotificationChannel(channelId, name, importance).apply { description = descriptionText }
-        // Register the channel with the system
-        val notificationManager = NotificationManagerCompat.from(context)
-        notificationManager.createNotificationChannel(channel)
+        NotificationManagerCompat.from(context).createNotificationChannel(channel)
       }
       return channelId
     }
@@ -232,7 +226,6 @@ class NotificationHelper {
           .notify(R.id.code_detected_notify_id, notificationBuilder.build())
 
       if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.O) {
-        // we need to schedule notification cleanup on older devices
         Handler(Looper.getMainLooper())
             .postDelayed(
                 { NotificationManagerCompat.from(context).cancel(R.id.code_detected_notify_id) },
@@ -253,8 +246,7 @@ class NotificationHelper {
           PendingIntentCompat.getActivity(
               context,
               0,
-              Intent(context, MainActivity::class.java).apply {
-                setPackage(context.packageName)
+              Intent(context, InternalActionActivity::class.java).apply {
                 setAction(INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS)
                 setFlags(
                     Intent.FLAG_ACTIVITY_NO_HISTORY or
@@ -288,7 +280,6 @@ class NotificationHelper {
         PackageManager.PERMISSION_GRANTED
       ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
           val name = context.getString(R.string.code_detected_channel_name)
           val descriptionText = context.getString(R.string.code_detected_channel_description)
           val importance = NotificationManager.IMPORTANCE_DEFAULT
@@ -296,8 +287,6 @@ class NotificationHelper {
               NotificationChannel("test_chan", name, importance).apply {
                 description = descriptionText
               }
-
-          // Register the channel with the system
           val notificationManager: NotificationManager =
               context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
           notificationManager.createNotificationChannel(channel)
