@@ -1,5 +1,6 @@
 package io.github.jd1378.otphelper.utils
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.usage.UsageStatsManager
 import android.content.ComponentName
@@ -9,10 +10,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.work.WorkManager
 import io.github.jd1378.otphelper.AccessibilityNotificationService
 import io.github.jd1378.otphelper.BuildConfig
 import io.github.jd1378.otphelper.MainActivity
+import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.NotificationListener
 import io.github.jd1378.otphelper.PersistenceService
 import io.github.jd1378.otphelper.UserSettings
@@ -36,6 +39,12 @@ object DiagnosticsReportManager {
     val persistenceRunning = isPersistenceServiceRunning(appContext)
     val excludedFromRecents = isExcludedFromRecents(appContext)
     val watchdogStates = watchdogStates(appContext)
+    val receiveSmsGranted =
+        ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECEIVE_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+    val readSmsGranted =
+        ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_SMS) ==
+            PackageManager.PERMISSION_GRANTED
 
     return buildString {
       appendLine("OTP Helper diagnostics")
@@ -72,6 +81,8 @@ object DiagnosticsReportManager {
       appendLine("accessibilityNotificationServiceActuallyConnected=${health.accessibilityConnected}")
       appendLine(
           "accessibilityNotificationConnectionChangedAt=${formatMillis(health.accessibilityChangedAt)}")
+      appendLine("receiveSmsGranted=$receiveSmsGranted")
+      appendLine("readSmsGranted=$readSmsGranted")
       appendLine("shizukuManagerInstalled=${shizuku.managerInstalled}")
       appendLine("shizukuBinderAlive=${shizuku.binderAlive}")
       appendLine("shizukuBinderEverReceived=${shizuku.binderEverReceived}")
@@ -85,36 +96,48 @@ object DiagnosticsReportManager {
       appendLine()
       appendLine("[automatic checks]")
       appendLine(check("App is visible in Recents", !excludedFromRecents))
-      appendLine(check("Notification access permission is enabled", listenerPermission))
-      appendLine(check("Notification listener is actually connected", health.listenerConnected))
-      appendLine(
-          if (!accessibilityEnabled) {
-            "INFO Optional Accessibility notification-event path is disabled"
-          } else {
-            check(
-                "Accessibility notification-event service is actually connected",
-                health.accessibilityConnected,
-            )
-          })
-      appendLine(
-          when {
-            !shizuku.managerInstalled -> "INFO Optional Shizuku Manager is not installed"
-            !shizuku.binderAlive -> "WARN Shizuku Manager is installed but Binder is not connected"
-            else -> "PASS Shizuku Binder is connected"
-          })
+      when (settings.modeOfOperation) {
+        ModeOfOperation.Notification -> {
+          appendLine(check("Notification access permission is enabled", listenerPermission))
+          appendLine(check("Notification listener is actually connected", health.listenerConnected))
+          appendLine(
+              if (!accessibilityEnabled) {
+                "INFO Optional Accessibility notification-event path is disabled"
+              } else {
+                check(
+                    "Accessibility notification-event service is actually connected",
+                    health.accessibilityConnected,
+                )
+              })
+          appendLine(
+              when {
+                !shizuku.managerInstalled -> "INFO Optional Shizuku Manager is not installed"
+                !shizuku.binderAlive ->
+                    "INFO Optional Shizuku Manager is installed but its service is not running"
+                else -> "PASS Optional Shizuku Binder is connected"
+              })
+        }
+        ModeOfOperation.SMS -> {
+          appendLine(check("RECEIVE_SMS permission is granted", receiveSmsGranted))
+          appendLine(check("READ_SMS permission is granted", readSmsGranted))
+          appendLine("INFO Notification listener, Accessibility and Shizuku paths are not required in SMS mode")
+        }
+        else -> appendLine("WARN Monitoring mode is not configured")
+      }
       appendLine(check("Foreground persistence service is running", persistenceRunning))
       appendLine(
           check(
               "Battery optimization exemption is enabled",
               powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) == true,
           ))
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+      if (settings.modeOfOperation == ModeOfOperation.Notification &&
+          Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
         appendLine(
             "INFO Android 15+ can redact OTP content from NotificationListenerService; " +
                 "AOSP trusts the listener when RECEIVE_SENSITIVE_NOTIFICATIONS AppOp is allowed")
         appendLine(
-            "INFO Shizuku repair applies that AppOp as shell/root and toggles listener access " +
-                "to refresh AOSP's trusted-listener UID cache")
+            "INFO Optional Shizuku repair applies that AppOp as shell/root and toggles listener " +
+                "access to refresh AOSP's trusted-listener UID cache")
         appendLine(
             "INFO Android Accessibility TYPE_NOTIFICATION_STATE_CHANGED remains a public API; " +
                 "AOSP may substitute Notification.publicVersion while the device is locked")
