@@ -17,3 +17,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Local-only signing and migration material. Never commit private keys or app-data archives.
+/otphelper-signing-output/
+/otphelper-adb-backup/
+*.jks
+*.keystore
+*signing-keystore-base64*.txt
