@@ -64,9 +64,11 @@ jobs:
               echo "- \`docs/HONOR_PHYSICAL_TEST_PLAN.md\`"
             } > "$report"
             git merge --abort || true
-            echo "conflict=true" >> "$GITHUB_OUTPUT"
-            echo "upstream_sha=$upstream_sha" >> "$GITHUB_OUTPUT"
-            echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+            {
+              echo "conflict=true"
+              echo "upstream_sha=$upstream_sha"
+              echo "base_sha=$base_sha"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -76,9 +78,11 @@ jobs:
           fi
 
           git push --force-with-lease origin "$branch"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          echo "upstream_sha=$upstream_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "changed=true"
+            echo "branch=$branch"
+            echo "upstream_sha=$upstream_sha"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Open draft pull request for clean upstream merge
         if: steps.merge.outputs.changed == 'true'
