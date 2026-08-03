@@ -93,6 +93,39 @@ if shizuku.get(android + "permission") != "android.permission.INTERACT_ACROSS_US
     raise SystemExit("ShizukuProvider protection permission is incorrect")
 if shizuku.get(android + "authorities") != "io.github.jd1378.otphelper.shizuku":
     raise SystemExit("ShizukuProvider authority is incorrect")
+
+internal_permission_name = "io.github.jd1378.otphelper.permission.BROADCAST_CODE"
+internal_permission = next(
+    (
+        permission
+        for permission in root.findall("permission")
+        if permission.get(android + "name") == internal_permission_name
+    ),
+    None,
+)
+if internal_permission is None:
+    raise SystemExit("Internal notification-action permission is not declared")
+if internal_permission.get(android + "protectionLevel") != "signature":
+    raise SystemExit("Internal notification-action permission must be signature-protected")
+
+requested_permissions = {
+    element.get(android + "name") for element in root.findall("uses-permission")
+}
+if internal_permission_name not in requested_permissions:
+    raise SystemExit("OTP Helper does not request its internal notification-action permission")
+
+action_receiver = next(
+    (
+        receiver
+        for receiver in application.findall("receiver")
+        if receiver.get(android + "name") == "io.github.jd1378.otphelper.NotifActionReceiver"
+    ),
+    None,
+)
+if action_receiver is None:
+    raise SystemExit("NotifActionReceiver is missing")
+if action_receiver.get(android + "permission") != internal_permission_name:
+    raise SystemExit("NotifActionReceiver is not protected by the signature permission")
 PY
 done
 
