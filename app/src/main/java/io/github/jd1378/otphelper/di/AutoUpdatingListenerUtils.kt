@@ -15,7 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-private data class ListenerSettingsSnapshot(
+data class ListenerSettingsSnapshot(
     val codeExtractor: CodeExtractor? = null,
     val isAutoDismissEnabled: Boolean = false,
     val isAutoMarkAsReadEnabled: Boolean = false,
@@ -89,4 +89,6 @@ constructor(private val userSettingsRepository: UserSettingsRepository) {
     }
     return ready
   }
+
+  fun current(): ListenerSettingsSnapshot = snapshot.get()
 }
