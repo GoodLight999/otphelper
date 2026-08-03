@@ -134,8 +134,18 @@ jobs:
           key_path="$RUNNER_TEMP/otphelper-fixed-signing.jks"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$key_path"
           chmod 600 "$key_path"
-          echo "available=true" >> "$GITHUB_OUTPUT"
-          echo "path=$key_path" >> "$GITHUB_OUTPUT"
+          {
+            echo "available=true"
+            echo "path=$key_path"
+          } >> "$GITHUB_OUTPUT"
+      - name: Verify fixed signing keystore
+        if: steps.signing.outputs.available == 'true'
+        env:
+          OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
+        run: .github/scripts/verify-signing-keystore.sh
       - name: Unit tests, lint, debug and release builds
         env:
           OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
