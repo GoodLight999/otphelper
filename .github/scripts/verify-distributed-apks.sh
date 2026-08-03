@@ -102,6 +102,25 @@ if main is None:
 if main.get(android + "excludeFromRecents") == "true":
     raise SystemExit("MainActivity is excluded from Recents")
 
+internal_action = next(
+    (
+        activity
+        for activity in application.findall("activity")
+        if activity.get(android + "name") == "io.github.jd1378.otphelper.InternalActionActivity"
+    ),
+    None,
+)
+if internal_action is None:
+    raise SystemExit("InternalActionActivity is missing")
+if internal_action.get(android + "exported") != "false":
+    raise SystemExit("InternalActionActivity must remain non-exported")
+if internal_action.get(android + "excludeFromRecents") != "true":
+    raise SystemExit("InternalActionActivity must be excluded from Recents")
+if internal_action.get(android + "noHistory") != "true":
+    raise SystemExit("InternalActionActivity must be noHistory")
+if internal_action.findall("intent-filter"):
+    raise SystemExit("InternalActionActivity must not expose Intent filters")
+
 accessibility = next(
     (
         service
@@ -147,9 +166,6 @@ internal_permission = next(
 if internal_permission is None:
     raise SystemExit("Internal notification-action permission is not declared")
 
-# apkanalyzer may render manifest enum values symbolically ("signature") or as
-# their compiled integer form ("0x2"). Android's PROTECTION_SIGNATURE constant
-# is 2, so both representations describe the same signature-only permission.
 protection_level = internal_permission.get(android + "protectionLevel")
 try:
     protection_level_is_signature = int(protection_level or "", 0) == 0x2
@@ -190,7 +206,6 @@ if requested_permissions != expected_permissions:
         f"missing={missing}, unexpected={unexpected}"
     )
 
-# Offline operation is a product privacy contract, not merely a source-level intention.
 for forbidden_permission in (
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
