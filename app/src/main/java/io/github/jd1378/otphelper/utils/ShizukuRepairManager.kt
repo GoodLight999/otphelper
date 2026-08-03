@@ -55,7 +55,8 @@ object ShizukuRepairManager {
     if (Shizuku.getVersion() < MINIMUM_USER_SERVICE_VERSION) {
       return ShizukuRepairResult.UNSUPPORTED
     }
-    if (Shizuku.getUid() != 0 && Shizuku.getUid() != 2000) {
+    val shizukuUid = Shizuku.getUid()
+    if (shizukuUid != 0 && shizukuUid != 2000) {
       return ShizukuRepairResult.INSUFFICIENT_PRIVILEGE
     }
     if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
@@ -101,7 +102,6 @@ object ShizukuRepairManager {
     try {
       Shizuku.bindUserService(args, connection)
       val service = serviceFuture.get(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-      MonitoringHealthStore.markListenerConnected(appContext, false)
       val output = service.execute(commands)
       AppLogger.i("ShizukuRepair", output.ifBlank { "notification repair commands completed" })
       return if (waitForListenerConnection(appContext)) {
