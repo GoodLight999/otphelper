@@ -29,7 +29,7 @@
 
   <string name="permission_resilience_desc">Aggressive firmware can disconnect notification access even after the standard permissions are granted. The foreground service, disconnected-only listener repair, WorkManager watchdog and Alarm recovery are the supported resilience paths.</string>
   <string name="permission_honor_recents_lock_desc">On HONOR MagicOS, also open Recents and swipe down on the OTP Helper card until the lock icon appears. OTP Helper is no longer hidden from Recents.</string>
-  <string name="permission_advanced_notification_recovery_desc">When standard notification access works, the options below are unnecessary. Open advanced recovery only if another app's OTP text is redacted or the standard listener cannot stay connected.</string>
+  <string name="permission_advanced_notification_recovery_desc">When standard notification access works, the options below are unnecessary. Open advanced recovery only if another app\'s OTP text is redacted or the standard listener cannot stay connected.</string>
   <string name="show_advanced_notification_recovery">Show advanced notification recovery</string>
   <string name="hide_advanced_notification_recovery">Hide advanced notification recovery</string>
   <string name="accessibility_service_label">OTP notification reader</string>
