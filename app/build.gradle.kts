@@ -70,11 +70,12 @@ android {
     create("normal") {
       isDefault = true
       dimension = "version"
+      versionNameSuffix = "-magic"
       buildConfigField("Boolean", "SMS_MODE_AVAILABLE", "true")
     }
     create("play") {
       dimension = "version"
-      versionNameSuffix = "-play"
+      versionNameSuffix = "-magic-play"
       buildConfigField("Boolean", "SMS_MODE_AVAILABLE", "false")
     }
   }
