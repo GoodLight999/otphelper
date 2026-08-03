@@ -160,9 +160,13 @@ constructor(
         }
       }
       launch {
-        _hasNotifListenerPerm.update {
-          NotificationManagerCompat.getEnabledListenerPackages(context)
-              .contains(context.packageName)
+        val enabled =
+            NotificationManagerCompat.getEnabledListenerPackages(context)
+                .contains(context.packageName)
+        val wasEnabled = _hasNotifListenerPerm.value
+        _hasNotifListenerPerm.value = enabled
+        if (enabled && !wasEnabled) {
+          MyWorkManager.rebindListeners(context, true)
         }
       }
       launch {
@@ -197,7 +201,6 @@ constructor(
         }
       }
     }
-    MyWorkManager.rebindListeners(context, true)
   }
 
   fun onSetupFinish(onNavigateToRoute: (String, Boolean, Boolean) -> Unit) {
