@@ -11,11 +11,33 @@ if [ -z "$apk_analyzer" ] || [ ! -x "$apk_analyzer" ]; then
   exit 1
 fi
 
+mapfile -t apks < <(find app/build/outputs/apk -type f -name '*.apk' -print | sort)
+if (( ${#apks[@]} < 4 )); then
+  echo "Expected normal/play debug/release APKs, found only ${#apks[@]}" >&2
+  exit 1
+fi
+
 mkdir -p app/build/reports/apk-inspection
-found=0
-for apk in app/build/outputs/apk/*/debug/*.apk; do
-  [ -f "$apk" ] || continue
-  found=1
+declare -A seen_variants=()
+for apk in "${apks[@]}"; do
+  case "$apk" in
+    */normal/*) flavor="normal" ;;
+    */play/*) flavor="play" ;;
+    *)
+      echo "Unable to identify APK flavor from path: $apk" >&2
+      exit 1
+      ;;
+  esac
+  case "$apk" in
+    */debug/*) build_type="debug" ;;
+    */release/*) build_type="release" ;;
+    *)
+      echo "Unable to identify APK build type from path: $apk" >&2
+      exit 1
+      ;;
+  esac
+  seen_variants["$flavor/$build_type"]=1
+
   name="$(basename "$apk")"
   unzip -tq "$apk"
   "$build_tools/apksigner" verify --verbose --print-certs "$apk" \
@@ -39,15 +61,23 @@ for apk in app/build/outputs/apk/*/debug/*.apk; do
     exit 1
   fi
 
-  python3 - "$manifest" <<'PY'
+  python3 - "$manifest" "$flavor" "$build_type" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
+manifest_path, flavor, build_type = sys.argv[1:]
 android = "{http://schemas.android.com/apk/res/android}"
-root = ET.parse(sys.argv[1]).getroot()
+root = ET.parse(manifest_path).getroot()
 application = root.find("application")
 if application is None:
     raise SystemExit("Merged APK Manifest has no application element")
+
+is_debuggable = application.get(android + "debuggable") == "true"
+if build_type == "debug" and not is_debuggable:
+    raise SystemExit("Debug APK must remain debuggable for guarded signing migration")
+if build_type == "release" and is_debuggable:
+    raise SystemExit("Release APK must not be debuggable")
+
 main = next(
     (
         activity
@@ -123,18 +153,41 @@ if not protection_level_is_signature:
 requested_permissions = {
     element.get(android + "name") for element in root.findall("uses-permission")
 }
-if internal_permission_name not in requested_permissions:
-    raise SystemExit("OTP Helper does not request its internal notification-action permission")
+common_permissions = {
+    internal_permission_name,
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+    "android.permission.WAKE_LOCK",
+    "io.github.jd1378.otphelper.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    "moe.shizuku.manager.permission.API_V23",
+}
+normal_only_permissions = {
+    "android.permission.RECEIVE_SMS",
+    "android.permission.READ_SMS",
+    "android.permission.QUERY_ALL_PACKAGES",
+}
+expected_permissions = common_permissions | (
+    normal_only_permissions if flavor == "normal" else set()
+)
+if requested_permissions != expected_permissions:
+    missing = sorted(expected_permissions - requested_permissions)
+    unexpected = sorted(requested_permissions - expected_permissions)
+    raise SystemExit(
+        f"Unexpected {flavor}/{build_type} permission set; "
+        f"missing={missing}, unexpected={unexpected}"
+    )
 
 # Offline operation is a product privacy contract, not merely a source-level intention.
-# Dependencies and manifest mergers must never add network permissions to a distributed APK.
 for forbidden_permission in (
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
 ):
     if forbidden_permission in requested_permissions:
         raise SystemExit(
-            f"Offline APK contract violated by requested permission: {forbidden_permission}"
+            f"Offline or least-privilege APK contract violated by: {forbidden_permission}"
         )
 
 action_receiver = next(
@@ -152,4 +205,9 @@ if action_receiver.get(android + "permission") != internal_permission_name:
 PY
 done
 
-test "$found" -eq 1
+for required_variant in normal/debug normal/release play/debug play/release; do
+  if [[ "${seen_variants[$required_variant]:-0}" != "1" ]]; then
+    echo "Required APK variant was not inspected: $required_variant" >&2
+    exit 1
+  fi
+done
