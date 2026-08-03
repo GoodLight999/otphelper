@@ -68,6 +68,17 @@ import xml.etree.ElementTree as ET
 manifest_path, flavor, build_type = sys.argv[1:]
 android = "{http://schemas.android.com/apk/res/android}"
 root = ET.parse(manifest_path).getroot()
+if root.get("package") != "io.github.jd1378.otphelper":
+    raise SystemExit(f"Unexpected application package: {root.get('package')!r}")
+
+version_name = root.get(android + "versionName") or ""
+expected_suffix = "-magic" if flavor == "normal" else "-magic-play"
+if not version_name.endswith(expected_suffix):
+    raise SystemExit(
+        f"{flavor}/{build_type} APK must expose the fork suffix "
+        f"{expected_suffix!r}; actual versionName={version_name!r}"
+    )
+
 application = root.find("application")
 if application is None:
     raise SystemExit("Merged APK Manifest has no application element")
