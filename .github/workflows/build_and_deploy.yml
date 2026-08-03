@@ -2,7 +2,7 @@ name: Fixed-signed fork release
 
 on:
   release:
-    types: [published]
+    types: [prereleased]
   workflow_dispatch:
 
 permissions:
@@ -95,7 +95,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Attach fixed-signed APKs to GitHub release
+      - name: Attach fixed-signed APKs to GitHub prerelease
         if: github.event_name == 'release'
         uses: ncipollo/release-action@v1
         with:
