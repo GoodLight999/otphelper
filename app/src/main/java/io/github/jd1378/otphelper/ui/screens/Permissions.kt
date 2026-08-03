@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +59,7 @@ fun Permissions(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var diagnosticsBusy by remember { mutableStateOf(false) }
+  var showAdvancedNotificationRecovery by rememberSaveable { mutableStateOf(false) }
   val permLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         viewModel.updatePermissionsStatus(context)
@@ -216,63 +218,82 @@ fun Permissions(
 
       if (uiState.modeOfOperation == ModeOfOperation.Notification) {
         Text(
-            stringResource(R.string.permission_accessibility_notification_desc),
-            modifier = Modifier.fillMaxWidth(),
-            fontSize = 15.sp,
-        )
-        TodoItem(
-            text = stringResource(R.string.permission_todo_accessibility_notifications),
-            actionText = stringResource(R.string.open_settings),
-            intermediate = !uiState.hasAccessibilityNotificationService,
-            checked = uiState.hasAccessibilityNotificationService,
-            checkboxSemantics = {
-              stateDescription =
-                  if (uiState.hasAccessibilityNotificationService) permissionGranted
-                  else permissionNotGranted
-            },
-        ) {
-          viewModel.onOpenAccessibilityPressed(context)
-        }
-      }
-
-      if (uiState.modeOfOperation == ModeOfOperation.Notification &&
-          Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-        Text(
-            stringResource(R.string.permission_shizuku_notification_desc),
-            modifier = Modifier.fillMaxWidth(),
-            fontSize = 15.sp,
-        )
-        val shizukuManager =
-            stringResource(
-                if (uiState.shizukuManagerInstalled) R.string.permission_shizuku_installed
-                else R.string.permission_shizuku_not_installed)
-        val shizukuBinder =
-            stringResource(
-                if (uiState.shizukuBinderAlive) R.string.permission_shizuku_connected
-                else R.string.permission_shizuku_not_connected)
-        Text(
-            stringResource(
-                R.string.permission_shizuku_status,
-                shizukuManager,
-                shizukuBinder,
-                uiState.shizukuPermission,
-            ),
+            stringResource(R.string.permission_advanced_notification_recovery_desc),
             modifier = Modifier.fillMaxWidth(),
             fontSize = 15.sp,
         )
         OutlinedButton(
             modifier = Modifier.fillMaxWidth(),
-            onClick = { viewModel.onRunShizukuRepair(context) },
+            onClick = {
+              showAdvancedNotificationRecovery = !showAdvancedNotificationRecovery
+            },
         ) {
-          Text(stringResource(R.string.permission_run_shizuku_repair))
+          Text(
+              stringResource(
+                  if (showAdvancedNotificationRecovery)
+                      R.string.hide_advanced_notification_recovery
+                  else R.string.show_advanced_notification_recovery))
         }
 
-        Text(
-            stringResource(R.string.read_notifs_android_15_desc),
-            modifier = Modifier.fillMaxWidth(),
-            fontSize = 15.sp)
-        CodeBlock(stringResource(R.string.adb_command_sensitive_notifs))
-        CodeBlock(stringResource(R.string.adb_command_kill_app))
+        if (showAdvancedNotificationRecovery) {
+          Text(
+              stringResource(R.string.permission_accessibility_notification_desc),
+              modifier = Modifier.fillMaxWidth(),
+              fontSize = 15.sp,
+          )
+          TodoItem(
+              text = stringResource(R.string.permission_todo_accessibility_notifications),
+              actionText = stringResource(R.string.open_settings),
+              intermediate = !uiState.hasAccessibilityNotificationService,
+              checked = uiState.hasAccessibilityNotificationService,
+              checkboxSemantics = {
+                stateDescription =
+                    if (uiState.hasAccessibilityNotificationService) permissionGranted
+                    else permissionNotGranted
+              },
+          ) {
+            viewModel.onOpenAccessibilityPressed(context)
+          }
+
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            Text(
+                stringResource(R.string.permission_shizuku_notification_desc),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 15.sp,
+            )
+            val shizukuManager =
+                stringResource(
+                    if (uiState.shizukuManagerInstalled) R.string.permission_shizuku_installed
+                    else R.string.permission_shizuku_not_installed)
+            val shizukuBinder =
+                stringResource(
+                    if (uiState.shizukuBinderAlive) R.string.permission_shizuku_connected
+                    else R.string.permission_shizuku_not_connected)
+            Text(
+                stringResource(
+                    R.string.permission_shizuku_status,
+                    shizukuManager,
+                    shizukuBinder,
+                    uiState.shizukuPermission,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 15.sp,
+            )
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { viewModel.onRunShizukuRepair(context) },
+            ) {
+              Text(stringResource(R.string.permission_run_shizuku_repair))
+            }
+
+            Text(
+                stringResource(R.string.read_notifs_android_15_desc),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 15.sp)
+            CodeBlock(stringResource(R.string.adb_command_sensitive_notifs))
+            CodeBlock(stringResource(R.string.adb_command_kill_app))
+          }
+        }
       }
 
       Text(
