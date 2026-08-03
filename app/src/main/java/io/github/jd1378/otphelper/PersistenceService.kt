@@ -178,7 +178,10 @@ class PersistenceService : Service() {
         .setOnlyAlertOnce(true)
         .setSilent(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .setPriority(NotificationCompat.PRIORITY_MIN)
+        // PRIORITY_LOW is the minimum documented priority for a foreground-service notification.
+        // The low-importance channel and setSilent() keep it unobtrusive without asking Android or
+        // an OEM launcher to treat the persistence status as a hidden/minimum-priority event.
+        .setPriority(NotificationCompat.PRIORITY_LOW)
         .setVisibility(NotificationCompat.VISIBILITY_SECRET)
         .addAction(0, getString(R.string.persistence_repair), repairIntent)
         .build()
