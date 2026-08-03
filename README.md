@@ -12,12 +12,17 @@ This repository is a maintained fork of [`jd1378/otphelper`](https://github.com/
 - PR remains Draft until permanent signing migration and the HONOR physical matrix are complete
 - upstream sync runs weekly and opens a Draft PR for clean upstream merges
 
-Current architecture and operational rules:
+Start with the canonical current-state handoff:
+
+- [`docs/CURRENT_HANDOFF.md`](docs/CURRENT_HANDOFF.md)
+
+Architecture and operational rules:
 
 - [`docs/FORK_MAINTENANCE.md`](docs/FORK_MAINTENANCE.md)
 - [`docs/PLATFORM_CONTRACTS.md`](docs/PLATFORM_CONTRACTS.md)
 - [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md)
 - [`docs/HONOR_PHYSICAL_TEST_PLAN.md`](docs/HONOR_PHYSICAL_TEST_PLAN.md)
+- [`docs/DATA_BACKUP_POLICY.md`](docs/DATA_BACKUP_POLICY.md)
 - [`tools/README.md`](tools/README.md)
 
 ## What this fork adds
@@ -26,6 +31,7 @@ Current architecture and operational rules:
 
 - normal visible Recents task instead of hiding the app card;
 - visible `specialUse` foreground service using `START_STICKY`;
+- low-priority, silent, ongoing persistence notification rather than a hidden/minimum-priority event;
 - one-minute listener-health heartbeat;
 - 15-minute WorkManager watchdog;
 - AlarmManager recovery after task removal or service destruction;
@@ -62,7 +68,10 @@ The app can copy or export a redacted diagnostic report containing actual connec
 CI validates:
 
 - normal/play JVM tests and Android Lint;
-- debug and minified release builds;
+- all normal/play debug and minified release APKs;
+- exact flavor-specific permission allowlists;
+- absence of internet, network-state, and direct battery-whitelist permissions;
+- debug APKs remain debuggable while release APKs do not;
 - merged APK Manifest contracts;
 - Recents visibility;
 - foreground service and watchdog startup;
@@ -70,7 +79,8 @@ CI validates:
 - absence of LeakCanary and experiment-only fixtures;
 - signature-protected internal notification actions;
 - fixed signing-certificate identity when signing Secrets are configured;
-- PowerShell maintenance-tool syntax.
+- actual disposable-JKS generation, fingerprint derivation, Base64 reconstruction, and JKS reopening;
+- Android backup allowlists and rejection of committed signing/migration secrets.
 
 ## How OTP detection works
 
@@ -143,6 +153,17 @@ Restore only after installing a debuggable APK signed by the permanent key. Rest
 
 See [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md) for the complete sequence.
 
+## Fork distribution boundary
+
+Fixed-signed fork releases are limited to this repository's GitHub prereleases. Each release contains:
+
+- normal release APK;
+- play-flavor release APK;
+- `SHA256SUMS.txt`;
+- `release-metadata.json` containing the source commit and public signing-certificate SHA-256.
+
+The workflow deliberately does not generate or upload a Google Play App Bundle. The fork's permanent signing identity is independent of the upstream project's official distribution identities.
+
 ## Upstream project and store builds
 
 The original project and its official store/release channels remain available from [`jd1378/otphelper`](https://github.com/jd1378/otphelper).
@@ -151,7 +172,9 @@ Those APKs are signed by identities not controlled by this fork. They are not in
 
 ## Privacy
 
-OTP Helper works offline and the application Manifest removes internet access. Notification and SMS contents are processed on-device. Diagnostic persistence and Logcat output redact OTP/PIN/code-like values and long standalone numeric runs before they are written.
+OTP Helper works offline. Final APK inspection rejects `INTERNET` and `ACCESS_NETWORK_STATE`, and notification/SMS contents are processed on-device. Diagnostic persistence and Logcat output redact OTP/PIN/code-like values and long standalone numeric runs before they are written.
+
+Android system backup and device transfer include only DataStore settings and phrase lists. The Room OTP-history database is excluded. The one-time ADB signing-migration archive is different: it may contain OTP history and must remain private. See [`docs/DATA_BACKUP_POLICY.md`](docs/DATA_BACKUP_POLICY.md).
 
 ## Credits
 
