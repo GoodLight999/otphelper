@@ -19,17 +19,20 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "17"
           distribution: temurin
-          cache: gradle
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Grant execute permission
         run: chmod +x gradlew .github/scripts/*.sh
@@ -61,8 +64,10 @@ jobs:
           key_path="$RUNNER_TEMP/otphelper-fixed-signing.jks"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$key_path"
           chmod 600 "$key_path"
-          echo "path=$key_path" >> "$GITHUB_OUTPUT"
-          echo "certificate_sha256=$normalized_cert" >> "$GITHUB_OUTPUT"
+          {
+            echo "path=$key_path"
+            echo "certificate_sha256=$normalized_cert"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build all fixed-signed APK variants
         env:
@@ -117,7 +122,7 @@ jobs:
 
       - name: Upload fixed-signed release APKs for manual dispatch
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: otphelper-fixed-signed-release-apks
           path: |
@@ -127,18 +132,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Attach fixed-signed APKs to GitHub prerelease
+      - name: Attach fixed-signed APKs to the triggering GitHub prerelease
         if: github.event_name == 'release'
-        uses: ncipollo/release-action@v1
-        with:
-          prerelease: true
-          omitBody: true
-          omitBodyDuringUpdate: true
-          omitName: true
-          allowUpdates: true
-          replacesArtifacts: true
-          updateOnlyUnreleased: true
-          artifacts: app/build/outputs/apk/normal/release/*.apk,app/build/outputs/apk/play/release/*.apk,app/build/outputs/fork-release/SHA256SUMS.txt,app/build/outputs/fork-release/release-metadata.json
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "Release event did not provide a tag name" >&2
+            exit 1
+          fi
+          mapfile -t assets < <(
+            find app/build/outputs/apk -type f -path '*/release/*.apk' -print | sort
+            printf '%s\n' \
+              app/build/outputs/fork-release/SHA256SUMS.txt \
+              app/build/outputs/fork-release/release-metadata.json
+          )
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Confirm fork-only distribution boundary
         run: >-
