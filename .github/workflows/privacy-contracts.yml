@@ -31,3 +31,17 @@ jobs:
             echo "Private signing or migration material must not be committed" >&2
             exit 1
           fi
+
+  signing-bootstrap-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Verify JKS generation and exact Secret transport
+        shell: pwsh
+        run: ./.github/scripts/test-signing-bootstrap.ps1
