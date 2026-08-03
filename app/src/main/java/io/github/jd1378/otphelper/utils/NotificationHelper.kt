@@ -76,6 +76,9 @@ class NotificationHelper {
       return channelId
     }
 
+    private fun actionIntent(context: Context, action: String): Intent =
+        Intent(context, NotifActionReceiver::class.java).setAction(action)
+
     @SuppressLint("MissingPermission", "LaunchActivityFromNotification")
     fun sendDetectedNotif(
       context: Context,
@@ -110,9 +113,7 @@ class NotificationHelper {
           PendingIntentCompat.getBroadcast(
               context,
               0,
-              Intent(NotifActionReceiver.INTENT_ACTION_CODE_COPY).apply {
-                setPackage(context.packageName)
-              },
+              actionIntent(context, NotifActionReceiver.INTENT_ACTION_CODE_COPY),
               0,
               false,
           )
@@ -141,8 +142,7 @@ class NotificationHelper {
             PendingIntentCompat.getBroadcast(
                 context,
                 0,
-                Intent(NotifActionReceiver.INTENT_ACTION_IGNORE_SMS_ORIGIN).apply {
-                  setPackage(context.packageName)
+                actionIntent(context, NotifActionReceiver.INTENT_ACTION_IGNORE_SMS_ORIGIN).apply {
                   putExtra("cancel_notif_id", R.id.code_detected_notify_id)
                 },
                 0,
@@ -158,10 +158,8 @@ class NotificationHelper {
             PendingIntentCompat.getBroadcast(
                 context,
                 0,
-                Intent(NotifActionReceiver.INTENT_ACTION_IGNORE_NOTIFICATION_APP).apply {
-                  setPackage(context.packageName)
-                  putExtra("cancel_notif_id", R.id.code_detected_notify_id)
-                },
+                actionIntent(context, NotifActionReceiver.INTENT_ACTION_IGNORE_NOTIFICATION_APP)
+                    .apply { putExtra("cancel_notif_id", R.id.code_detected_notify_id) },
                 0,
                 false,
             )
@@ -194,10 +192,11 @@ class NotificationHelper {
               PendingIntentCompat.getBroadcast(
                   context,
                   0,
-                  Intent(NotifActionReceiver.INTENT_ACTION_IGNORE_TAG_NOTIFICATION_TAG).apply {
-                    setPackage(context.packageName)
-                    putExtra("cancel_notif_id", R.id.code_detected_notify_id)
-                  },
+                  actionIntent(
+                          context,
+                          NotifActionReceiver.INTENT_ACTION_IGNORE_TAG_NOTIFICATION_TAG,
+                      )
+                      .apply { putExtra("cancel_notif_id", R.id.code_detected_notify_id) },
                   0,
                   false,
               )
@@ -212,10 +211,11 @@ class NotificationHelper {
               PendingIntentCompat.getBroadcast(
                   context,
                   0,
-                  Intent(NotifActionReceiver.INTENT_ACTION_IGNORE_TAG_NOTIFICATION_NID).apply {
-                    setPackage(context.packageName)
-                    putExtra("cancel_notif_id", R.id.code_detected_notify_id)
-                  },
+                  actionIntent(
+                          context,
+                          NotifActionReceiver.INTENT_ACTION_IGNORE_TAG_NOTIFICATION_NID,
+                      )
+                      .apply { putExtra("cancel_notif_id", R.id.code_detected_notify_id) },
                   0,
                   false,
               )
