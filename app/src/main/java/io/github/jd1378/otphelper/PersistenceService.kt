@@ -154,7 +154,7 @@ class PersistenceService : Service() {
         PendingIntent.getActivity(
             this,
             4819,
-            Intent(this, MainActivity::class.java)
+            Intent(this, InternalActionActivity::class.java)
                 .setAction(INTENT_ACTION_REPAIR_BACKGROUND)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
