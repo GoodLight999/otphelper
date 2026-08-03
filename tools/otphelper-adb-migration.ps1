@@ -36,8 +36,7 @@ if (-not [string]::IsNullOrWhiteSpace($Serial)) {
 
 function New-AdbProcess {
     param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments,
+        [Parameter(Mandatory)][string[]]$Arguments,
         [switch]$RedirectStandardInput
     )
 
@@ -55,33 +54,35 @@ function New-AdbProcess {
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
     if (-not $process.Start()) {
-        throw "Unable to start adb: $($Arguments -join ' ')"
+        throw "Unable to start adb: adb $($Arguments -join ' ')"
     }
     return $process
 }
 
 function Invoke-AdbText {
     param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments,
+        [Parameter(Mandatory)][string[]]$Arguments,
         [switch]$AllowFailure
     )
 
     $process = New-AdbProcess -Arguments $Arguments
-    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-    $stderrTask = $process.StandardError.ReadToEndAsync()
-    $process.WaitForExit()
-    $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
-    $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
-
-    if ($process.ExitCode -ne 0 -and -not $AllowFailure) {
-        throw "adb failed ($($process.ExitCode)): adb $($Arguments -join ' ')`n$stderr"
+    try {
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
+        $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+        if ($process.ExitCode -ne 0 -and -not $AllowFailure) {
+            throw "adb failed ($($process.ExitCode)): adb $($Arguments -join ' ')`n$stderr"
+        }
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            StdOut = $stdout
+            StdErr = $stderr
+        }
     }
-
-    [pscustomobject]@{
-        ExitCode = $process.ExitCode
-        StdOut = $stdout
-        StdErr = $stderr
+    finally {
+        $process.Dispose()
     }
 }
 
@@ -147,7 +148,6 @@ function Find-ApkSigner {
         if (-not (Test-Path -LiteralPath $buildToolsRoot -PathType Container)) {
             continue
         }
-
         $candidate = Get-ChildItem -LiteralPath $buildToolsRoot -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -in @('apksigner', 'apksigner.bat') } |
             Sort-Object @{
@@ -173,16 +173,16 @@ function Get-InstalledCertificateSha256 {
     if ($packagePaths.Count -eq 0) {
         throw "No installed APK path was returned for $Package."
     }
-    $remoteApk = @($packagePaths | Where-Object { $_ -match '(^|/)base\.apk$' } | Select-Object -First 1)
-    if ($remoteApk.Count -eq 0) {
-        $remoteApk = @($packagePaths[0])
+    $baseApk = $packagePaths | Where-Object { $_ -match '(^|/)base\.apk$' } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($baseApk)) {
+        $baseApk = $packagePaths[0]
     }
 
     $temporaryApk = Join-Path ([System.IO.Path]::GetTempPath()) (
         'otphelper-installed-' + [guid]::NewGuid().ToString('N') + '.apk'
     )
     try {
-        [void](Invoke-AdbText -Arguments @('pull', $remoteApk[0], $temporaryApk))
+        [void](Invoke-AdbText -Arguments @('pull', $baseApk, $temporaryApk))
         $apkSigner = Find-ApkSigner
         $output = @(& $apkSigner verify --print-certs $temporaryApk 2>&1)
         if ($LASTEXITCODE -ne 0) {
@@ -252,22 +252,27 @@ function Save-AppArchive {
     param([Parameter(Mandatory)][string]$ArchivePath)
 
     $process = New-AdbProcess -Arguments @('exec-out', 'run-as', $Package, 'tar', '-cf', '-', '.')
-    $stderrTask = $process.StandardError.ReadToEndAsync()
-    $file = [System.IO.File]::Create($ArchivePath)
     try {
-        $process.StandardOutput.BaseStream.CopyToAsync($file).GetAwaiter().GetResult()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $file = [System.IO.File]::Create($ArchivePath)
+        try {
+            $process.StandardOutput.BaseStream.CopyToAsync($file).GetAwaiter().GetResult()
+        }
+        finally {
+            $file.Dispose()
+        }
+        $process.WaitForExit()
+        $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+        if ($process.ExitCode -ne 0) {
+            Remove-Item -LiteralPath $ArchivePath -Force -ErrorAction SilentlyContinue
+            throw "ADB app-data backup failed ($($process.ExitCode)): $stderr"
+        }
     }
     finally {
-        $file.Dispose()
-    }
-    $process.WaitForExit()
-    $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
-    if ($process.ExitCode -ne 0) {
-        Remove-Item -LiteralPath $ArchivePath -Force -ErrorAction SilentlyContinue
-        throw "ADB app-data backup failed ($($process.ExitCode)): $stderr"
+        $process.Dispose()
     }
     if ((Get-Item -LiteralPath $ArchivePath).Length -lt 512) {
-        throw 'The generated app-data archive is unexpectedly small; refusing to treat it as a valid backup.'
+        throw 'The generated app-data archive is unexpectedly small; refusing to treat it as valid.'
     }
 }
 
@@ -275,21 +280,26 @@ function Restore-AppArchive {
     param([Parameter(Mandatory)][string]$ArchivePath)
 
     $process = New-AdbProcess -Arguments @('exec-in', 'run-as', $Package, 'tar', '-xf', '-') -RedirectStandardInput
-    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-    $stderrTask = $process.StandardError.ReadToEndAsync()
-    $file = [System.IO.File]::OpenRead($ArchivePath)
     try {
-        $file.CopyToAsync($process.StandardInput.BaseStream).GetAwaiter().GetResult()
-        $process.StandardInput.Close()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $file = [System.IO.File]::OpenRead($ArchivePath)
+        try {
+            $file.CopyToAsync($process.StandardInput.BaseStream).GetAwaiter().GetResult()
+            $process.StandardInput.Close()
+        }
+        finally {
+            $file.Dispose()
+        }
+        $process.WaitForExit()
+        $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
+        $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+        if ($process.ExitCode -ne 0) {
+            throw "ADB app-data restore failed ($($process.ExitCode)):`n$stdout`n$stderr"
+        }
     }
     finally {
-        $file.Dispose()
-    }
-    $process.WaitForExit()
-    $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
-    $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
-    if ($process.ExitCode -ne 0) {
-        throw "ADB app-data restore failed ($($process.ExitCode)):`n$stdout`n$stderr"
+        $process.Dispose()
     }
 }
 
@@ -309,8 +319,10 @@ function Invoke-BestEffort {
 }
 
 function Start-OtpHelperBestEffort {
-    Invoke-BestEffort 'Launch OTP Helper' @(
-        'shell', 'am', 'start', '-n', "$Package/$Package.MainActivity"
+    # Resolve the current exported launcher Activity/alias instead of targeting private MainActivity.
+    Invoke-BestEffort 'Launch OTP Helper through its launcher contract' @(
+        'shell', 'monkey', '-p', $Package,
+        '-c', 'android.intent.category.LAUNCHER', '1'
     )
 }
 
@@ -385,7 +397,7 @@ switch ($Action) {
 
             Write-Host "Backup complete: $BackupDirectory"
             Write-Host "Archive SHA-256: $($metadata.archiveSha256)"
-            Write-Warning 'Keep the current APK installed until the permanent signing key and a fixed-signed DEBUG APK are ready.'
+            Write-Warning 'Keep the current APK installed until the permanent key and fixed-signed DEBUG APK are ready.'
         }
         finally {
             Start-OtpHelperBestEffort
@@ -394,7 +406,7 @@ switch ($Action) {
 
     'Restore' {
         if (-not $ConfirmRestore) {
-            throw 'Restore clears the currently installed OTP Helper app data. Re-run with -ConfirmRestore after installing the permanent-key DEBUG APK.'
+            throw 'Restore clears the installed app data. Re-run with -ConfirmRestore only after installing the permanent-key DEBUG APK.'
         }
         if ([string]::IsNullOrWhiteSpace($ExpectedCertificateSha256)) {
             throw 'Restore requires -ExpectedCertificateSha256 for the permanent signing identity.'
