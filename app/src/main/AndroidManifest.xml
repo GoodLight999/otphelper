@@ -64,7 +64,7 @@
         android:excludeFromRecents="true"
         android:exported="false"
         android:noHistory="true"
-        android:theme="@style/Theme.OtpHelper" />
+        android:theme="@style/Theme.OtpHelper.InternalAction" />
 
     <service
         android:name=".PersistenceService"
