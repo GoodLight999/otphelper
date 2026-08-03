@@ -59,6 +59,13 @@
       </intent-filter>
     </activity>
 
+    <activity
+        android:name=".InternalActionActivity"
+        android:excludeFromRecents="true"
+        android:exported="false"
+        android:noHistory="true"
+        android:theme="@style/Theme.OtpHelper" />
+
     <service
         android:name=".PersistenceService"
         android:exported="false"
