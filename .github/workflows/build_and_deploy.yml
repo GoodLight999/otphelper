@@ -69,6 +69,14 @@ jobs:
             echo "certificate_sha256=$normalized_cert"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Verify fixed signing keystore
+        env:
+          OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
+        run: .github/scripts/verify-signing-keystore.sh
+
       - name: Build all fixed-signed APK variants
         env:
           OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
