@@ -5,62 +5,112 @@ on:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: otphelper-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: cimg/android:2023.09.1
-      options: --user root
+    timeout-minutes: 45
 
     steps:
-      - name: install git
-        run: |
-          sudo apt-get update
-          sudo apt-get -y install git
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: setup JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: temurin
           cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: build
+      - name: Grant execute permission
+        run: chmod +x gradlew .github/scripts/*.sh
+
+      - name: Require fixed distribution signing key
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.OTPHELPER_SIGNING_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
+          CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
         run: |
-          ./gradlew --no-daemon :app:bundlePlayRelease --stacktrace
-          ./gradlew --no-daemon :app:assembleNormalRelease --stacktrace
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" \
+                || -z "$KEY_PASSWORD" || -z "$CERT_SHA256" ]]; then
+            echo "::error::Release refused: the permanent OTP Helper signing secrets are incomplete."
+            exit 1
+          fi
 
-      - name: Sign App Apk
-        if: ${{ github.event_name == 'release' }}
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/normal/release
-          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-          alias: ${{ secrets.ANDROID_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          key_path="$RUNNER_TEMP/otphelper-fixed-signing.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo "path=$key_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build fixed-signed release artifacts
         env:
-          BUILD_TOOLS_VERSION: "33.0.1"
+          OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          OTPHELPER_KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
+        run: >-
+          ./gradlew --no-daemon --no-build-cache
+          :app:clean
+          :app:bundlePlayRelease
+          :app:assembleNormalRelease
+          --stacktrace
 
-      - name: Sign App Bundle
-        if: ${{ github.event_name == 'release' }}
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/bundle/playRelease
-          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-          alias: ${{ secrets.ANDROID_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Verify APK certificate
         env:
-          BUILD_TOOLS_VERSION: "33.0.1"
+          OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
+        run: .github/scripts/verify-fixed-signing.sh
 
-      - name: Release on GitHub
+      - name: Verify App Bundle certificate
+        shell: bash
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" \
+            | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Invalid expected App Bundle certificate SHA-256" >&2
+            exit 1
+          fi
+
+          mapfile -t bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print | sort)
+          if (( ${#bundles[@]} != 1 )); then
+            echo "Expected exactly one App Bundle, found ${#bundles[@]}" >&2
+            exit 1
+          fi
+
+          bundle="${bundles[0]}"
+          jarsigner -verify -strict "$bundle"
+          actual="$(keytool -printcert -jarfile "$bundle" \
+            | sed -n 's/^[[:space:]]*SHA256: //p' \
+            | head -n 1 \
+            | tr -d ':[:space:]' \
+            | tr '[:upper:]' '[:lower:]')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "App Bundle signing certificate mismatch" >&2
+            echo "expected=$expected" >&2
+            echo "actual=$actual" >&2
+            exit 1
+          fi
+          echo "Fixed App Bundle certificate verified: $actual"
+
+      - name: Attach fixed-signed artifacts to GitHub release
+        if: github.event_name == 'release'
         uses: ncipollo/release-action@v1
         with:
           prerelease: true
@@ -70,10 +120,10 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           updateOnlyUnreleased: true
-          artifacts: app/build/outputs/apk/normal/release/*signed.apk,app/build/outputs/bundle/playRelease/*.aab
+          artifacts: app/build/outputs/apk/normal/release/*.apk,app/build/outputs/bundle/playRelease/*.aab
 
-      - name: Push to Play Store
-        if: ${{ github.event_name == 'release' && !contains(github.ref, '-rc') }}
+      - name: Push fixed-signed bundle to Play Store
+        if: github.event_name == 'release' && !contains(github.ref, '-rc')
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
