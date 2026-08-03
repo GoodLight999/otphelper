@@ -12,9 +12,10 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out fork
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -103,7 +104,7 @@ jobs:
 
       - name: Upload merge-conflict report
         if: steps.merge.outputs.conflict == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: upstream-sync-conflict
           path: upstream-sync-conflict.md
