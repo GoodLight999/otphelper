@@ -70,6 +70,7 @@ object ShizukuRepairManager {
     val listenerComponent =
         ComponentName(appContext, NotificationListener::class.java).flattenToString()
     val commands = buildRepairCommands(appContext.packageName, listenerComponent, Build.VERSION.SDK_INT)
+    val listenerEnableCommand = buildListenerEnableCommand(listenerComponent)
     val args =
         Shizuku.UserServiceArgs(
                 ComponentName(BuildConfig.APPLICATION_ID, RepairUserService::class.java.name))
@@ -102,7 +103,26 @@ object ShizukuRepairManager {
     try {
       Shizuku.bindUserService(args, connection)
       val service = serviceFuture.get(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-      val output = service.execute(commands)
+      val output =
+          try {
+            service.execute(commands)
+          } catch (error: Throwable) {
+            runCatching { service.execute(arrayOf(listenerEnableCommand)) }
+                .onSuccess {
+                  AppLogger.w(
+                      "ShizukuRepair",
+                      "repair failed after listener toggle; listener access rollback completed",
+                  )
+                }
+                .onFailure { rollbackError ->
+                  AppLogger.e(
+                      "ShizukuRepair",
+                      "repair failed and listener access rollback also failed",
+                      rollbackError,
+                  )
+                }
+            throw error
+          }
       AppLogger.i("ShizukuRepair", output.ifBlank { "notification repair commands completed" })
       return if (waitForListenerConnection(appContext)) {
         ShizukuRepairResult.APPLIED_AND_LISTENER_CONNECTED
@@ -131,9 +151,12 @@ object ShizukuRepairManager {
             }
             // AOSP stores trusted listener UIDs when the component is added/enabled.
             add("cmd notification disallow_listener ${shellQuote(listenerComponent)}")
-            add("cmd notification allow_listener ${shellQuote(listenerComponent)}")
+            add(buildListenerEnableCommand(listenerComponent))
           }
           .toTypedArray()
+
+  internal fun buildListenerEnableCommand(listenerComponent: String): String =
+      "cmd notification allow_listener ${shellQuote(listenerComponent)}"
 
   private fun waitForListenerConnection(context: Context): Boolean {
     val deadline = SystemClock.elapsedRealtime() + LISTENER_WAIT_MS
