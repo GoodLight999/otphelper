@@ -88,10 +88,15 @@ fun Permissions(
         }
       }
 
-  LaunchedEffect(lifecycleState) {
+  LaunchedEffect(lifecycleState, showAdvancedNotificationRecovery) {
     when (lifecycleState) {
       Lifecycle.State.STARTED,
-      Lifecycle.State.RESUMED -> viewModel.updatePermissionsStatus(context)
+      Lifecycle.State.RESUMED -> {
+        viewModel.updatePermissionsStatus(context)
+        if (showAdvancedNotificationRecovery) {
+          viewModel.updateAdvancedRecoveryStatus(context)
+        }
+      }
       else -> {}
     }
   }
