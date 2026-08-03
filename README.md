@@ -1,136 +1,158 @@
-# COPY SMS CODE | OTP Helper | کپی رمز پیامک
+# OTP Helper — HONOR MagicOS resilience fork
 
-An open-source application that allows you to copy OTP and codes from SMS and notifications automatically by reading all of your notifications.
+This repository is a maintained fork of [`jd1378/otphelper`](https://github.com/jd1378/otphelper). It preserves the original offline OTP/SMS functionality while adding a dedicated resilience layer for HONOR MagicOS, Android 15/16 notification restrictions, complete phrase-list backup, and reproducible diagnostics.
 
-The application works completely offline and without internet permission. So you can be rest assured that your data does not leave your device.
+> [!IMPORTANT]
+> No current APK from this fork is offered as a stable download yet. The earlier physical-test APK was signed by an ephemeral CI debug key whose private key no longer exists. CI now refuses to upload installable APKs until one permanent signing identity is configured and verified. Do not treat an old Actions artifact as an update channel.
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-     alt="Get it on F-Droid"
-     height="80">](https://f-droid.org/packages/io.github.jd1378.otphelper/)
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
-     alt='Get it on Google Play'
-     height="80">](https://play.google.com/store/apps/details?id=io.github.jd1378.otphelper)
-[<img src="https://raw.githubusercontent.com/jd1378/otphelper/main/cafebazaar.png"
-     alt='Get it on Bazaar'
-     height="80">](https://cafebazaar.ir/app/io.github.jd1378.otphelper)
+## Fork status
 
-or get the APK from [Latest Release](https://github.com/jd1378/otphelper/releases/latest).
+- implementation branch: `agent/magicos-resilience-and-backup`
+- integration PR: [#1 — harden MagicOS persistence and Android 15/16 OTP reading](https://github.com/GoodLight999/otphelper/pull/1)
+- PR remains Draft until permanent signing migration and the HONOR physical matrix are complete
+- upstream sync runs weekly and opens a Draft PR for clean upstream merges
 
-## How it works
+Current architecture and operational rules:
 
-The app works in 2 modes:
+- [`docs/FORK_MAINTENANCE.md`](docs/FORK_MAINTENANCE.md)
+- [`docs/PLATFORM_CONTRACTS.md`](docs/PLATFORM_CONTRACTS.md)
+- [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md)
+- [`docs/HONOR_PHYSICAL_TEST_PLAN.md`](docs/HONOR_PHYSICAL_TEST_PLAN.md)
+- [`tools/README.md`](tools/README.md)
 
-### 1. Notification
+## What this fork adds
 
-The app setups a [notification listener](https://github.com/jd1378/otphelper/blob/main/app/src/main/java/io/github/jd1378/otphelper/NotificationListener.kt) and reads all notifications that is sent by any apps. This allows the app to detect codes also from emails and possibly any other app that sends notification.
-when a notification is sent, the app creates a single string from all text in the notification, then [checks if it should be ignored](https://github.com/jd1378/otphelper/blob/main/app/src/main/java/io/github/jd1378/otphelper/utils/CodeIgnore.kt). If It's not ignored, then It's matched against the [code detection regex](https://github.com/jd1378/otphelper/blob/main/app/src/main/java/io/github/jd1378/otphelper/utils/CodeExtractor.kt). The extracted code is then handled according to your settings.
+### MagicOS persistence
 
-### 2. SMS
+- normal visible Recents task instead of hiding the app card;
+- visible `specialUse` foreground service using `START_STICKY`;
+- one-minute listener-health heartbeat;
+- 15-minute WorkManager watchdog;
+- AlarmManager recovery after task removal or service destruction;
+- boot, user-unlock, and package-replacement recovery;
+- HONOR/Huawei App launch targets plus a System Manager fallback when MagicOS rejects direct launch;
+- built-in guidance for App launch controls, Recents locking, and battery optimization.
 
-The app listens to all incoming SMS messages and then processes them in the same way as the notification mode: checks if it should be ignored, and if not, matches it against the code detection regex. The extracted code is then handled according to your settings.
+Android's explicit **Force stop** places the package in the stopped state. An ordinary app cannot bypass that state; the user must launch it again or a permitted system action must clear it.
 
-## How to build
+### Notification-reading paths
 
-Simply run:
+1. **Standard NotificationListenerService** — primary path.
+2. **Notification-only Accessibility service** — optional fallback limited to `TYPE_NOTIFICATION_STATE_CHANGED`; it does not request window content, gestures, key events, or screenshots.
+3. **Shizuku repair** — optional Android 15+ repair for the standard listener. Shizuku is not used as a general notification reader.
+4. **SMS receiver** — independent path retained in the normal flavor.
+
+The standard listener and Accessibility path share package+code duplicate suppression.
+
+### Phrase backup
+
+The sensitive/detection, ignored/exclusion, and cleanup/removal phrase screens support:
+
+- individual import and export;
+- complete import and export of all three lists;
+- versioned JSON;
+- JSON string arrays and one-phrase-per-line UTF-8 text for individual imports;
+- atomic complete restore;
+- type, schema, version, size, and regular-expression validation.
+
+### Diagnostics and validation
+
+The app can copy or export a redacted diagnostic report containing actual connection state, foreground-service/watchdog state, battery and standby information, optional Shizuku state, and bounded rotating logs.
+
+CI validates:
+
+- normal/play JVM tests and Android Lint;
+- debug and minified release builds;
+- merged APK Manifest contracts;
+- Recents visibility;
+- foreground service and watchdog startup;
+- real NotificationListener and Accessibility service binding on API 35 and API 36 emulators;
+- absence of LeakCanary and experiment-only fixtures;
+- signature-protected internal notification actions;
+- fixed signing-certificate identity when signing Secrets are configured;
+- PowerShell maintenance-tool syntax.
+
+## How OTP detection works
+
+The original application works in two main modes.
+
+### Notification mode
+
+The app receives posted notifications through the selected notification-ingestion path, combines the available public text fields, applies ignored phrases and cleanup phrases, then matches the configured code-detection rules. The extracted code is handled according to the user's clipboard, notification, history, and optional dismissal settings.
+
+Android 15/16 or the source app may redact sensitive notification content. A connected listener proves service connectivity, not that a particular third-party OTP body was exposed. Real OTP capability is therefore validated separately on the target firmware.
+
+### SMS mode
+
+The normal flavor listens for incoming SMS messages, applies the same ignore, cleanup, and detection pipeline, and handles the extracted code according to the user's settings.
+
+## Local development
+
+Requirements:
+
+- JDK 17;
+- Android SDK with API 36 and current Build Tools;
+- PowerShell 7 for the signing/migration helpers.
+
+Run JVM tests, Lint, and debug builds:
 
 ```bash
-./gradlew :app:assembleRelease
+./gradlew --no-daemon \
+  :app:testNormalDebugUnitTest \
+  :app:testPlayDebugUnitTest \
+  :app:lintNormalDebug \
+  :app:lintPlayDebug \
+  :app:assembleNormalDebug \
+  :app:assemblePlayDebug
 ```
 
-The apk should be available in `apps/build/outputs/apk/release/` directory.
+Debug APKs are written below:
+
+```text
+app/build/outputs/apk/normal/debug/
+app/build/outputs/apk/play/debug/
+```
+
+A local debug build without the permanent signing environment variables uses the machine's ordinary debug identity. It is suitable for isolated development only and must not be distributed as the fork's update lineage.
+
+Release and distributable debug builds require the fixed signing inputs documented in [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md).
+
+## Permanent signing bootstrap
+
+Create permanent signing material only after reading the migration runbook:
+
+```powershell
+pwsh ./tools/new-otphelper-signing-key.ps1 `
+  -OutputDirectory ./otphelper-signing-output `
+  -ConfirmCreate
+```
+
+Back up the resulting JKS independently before configuring CI or uninstalling any existing APK. The helper never writes the password to disk and can optionally configure the five GitHub Actions Secrets through `gh secret set`.
+
+## One-time device migration
+
+The old physical-test signature cannot be updated in place. Preserve its private data before replacing it:
+
+```powershell
+pwsh ./tools/otphelper-adb-migration.ps1 `
+  -Action Backup `
+  -BackupDirectory ./otphelper-adb-backup
+```
+
+Restore only after installing a debuggable APK signed by the permanent key. Restore requires the expected permanent certificate SHA-256 and refuses to clear data when the installed certificate differs.
+
+See [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md) for the complete sequence.
+
+## Upstream project and store builds
+
+The original project and its official store/release channels remain available from [`jd1378/otphelper`](https://github.com/jd1378/otphelper).
+
+Those APKs are signed by identities not controlled by this fork. They are not interchangeable in place with future permanent-key fork builds despite sharing the same package ID.
+
+## Privacy
+
+OTP Helper works offline and the application Manifest removes internet access. Notification and SMS contents are processed on-device. Diagnostic persistence and Logcat output redact OTP/PIN/code-like values and long standalone numeric runs before they are written.
 
 ## Credits
 
-Feature graphic image generated by [hotpot.ai](https://hotpot.ai/templates/google-play-feature-graphic)
-
-### Translated by these awesome people
-
-German:
-
-- [@Dacid99](https://github.com/Dacid99)
-
-Spanish:
-
-- [@nilp0inter](https://github.com/nilp0inter)
-
-Turkish:
-
-- [@SirCrownguard](https://github.com/SirCrownguard)
-
-Bangla (Bangladesh):
-
-- [@0xNaimulHasanTaky](https://github.com/0xNaimulHasanTaky)
-
-Vietnamese:
-
-- [@Sharethebest](https://github.com/Sharethebest)
-
-Chinese (Hans):
-
-- [@BackMountainDevil](https://github.com/BackMountainDevil)
-
-Chinese (Hant):
-
-- [@sntc06](https://github.com/sntc06)
-
-Russian:
-
-- [@darkspacer](https://github.com/darkspacer)
-
-Italian:
-
-- [@lollo03](https://github.com/lollo03)
-
-French:
-
-- [@trev0r-STA](https://github.com/trev0r-STA)
-
-Arabic:
-
-- [@Bunny-77X](https://github.com/Bunny-77X)
-
-Hindi:
-
-- [@chintanjoshi01](https://github.com/chintanjoshi01)
-
-Ukrainian:
-
-- [@balaraz](https://github.com/balaraz)
-
-Portuguese:
-
-- [@HackerSinhos](https://github.com/HackerSinhos)
-
-Polish:
-
-- [@pakin1](https://github.com/pakin1)
-
-Japanese:
-
-- [@KAWASAKICHIRO](https://github.com/KAWASAKICHIRO)
-
-Korean:
-
-- [@alexkoala](https://github.com/alexkoala)
-
-You can help translate this app to your langauge on weblate:
-
-<a href="https://hosted.weblate.org/engage/copy-sms-code-otp-helper/">
-<img src="https://hosted.weblate.org/widget/copy-sms-code-otp-helper/287x66-grey.png" alt="Translation status" />
-</a>
-
---------
-
-### Donation
-
-You can show your love and support for this project by donating to the following addresses:
-
-BTC: bc1q8prgxcfcqpcq5ennyv08sxg6ymx2pm4azvcu0l
-
-LTC: LVnTy14pHFRoSbqWbmhGBNjV4k2dBnY2Zn
-
----------
-
-### Stars over time
-
-<img src="https://api.star-history.com/svg?repos=jd1378/otphelper&type=Date&theme=dark" alt="Chart of github stars over time"/>
+This fork retains and builds upon the work of the upstream author and contributors. Original project credits, translations, store listings, and donation information are maintained in the upstream repository.
