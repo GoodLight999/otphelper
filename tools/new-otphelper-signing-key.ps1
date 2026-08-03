@@ -12,6 +12,8 @@ param(
 
     [string]$Repository = 'GoodLight999/otphelper',
 
+    [string]$PasswordEnvironmentVariable,
+
     [switch]$ConfigureGitHubSecrets,
 
     [switch]$ConfirmCreate
@@ -95,10 +97,21 @@ $checksumsPath = Join-Path $outputPath $targetFiles[4]
 $manifestPath = Join-Path $outputPath $targetFiles[5]
 $readmePath = Join-Path $outputPath $targetFiles[6]
 
-$passwordSecure = Read-Host 'Enter one strong password for the keystore and key' -AsSecureString
-$passwordConfirmSecure = Read-Host 'Enter the same password again' -AsSecureString
-$password = Get-PlainText $passwordSecure
-$passwordConfirm = Get-PlainText $passwordConfirmSecure
+if ([string]::IsNullOrWhiteSpace($PasswordEnvironmentVariable)) {
+    $passwordSecure = Read-Host 'Enter one strong password for the keystore and key' -AsSecureString
+    $passwordConfirmSecure = Read-Host 'Enter the same password again' -AsSecureString
+    $password = Get-PlainText $passwordSecure
+    $passwordConfirm = Get-PlainText $passwordConfirmSecure
+}
+else {
+    $password = [Environment]::GetEnvironmentVariable($PasswordEnvironmentVariable)
+    if ([string]::IsNullOrWhiteSpace($password)) {
+        throw "Password environment variable is missing or blank: $PasswordEnvironmentVariable"
+    }
+    $passwordConfirm = $password
+    Write-Host "Using password from environment variable '$PasswordEnvironmentVariable'."
+}
+
 if ([string]::IsNullOrWhiteSpace($password)) {
     throw 'The signing password must not be blank.'
 }
@@ -111,6 +124,7 @@ if ($password -cne $passwordConfirm) {
 
 $validityDays = [checked]($ValidityYears * 365)
 $created = $false
+$keystoreBase64 = $null
 $env:OTPHELPER_KEYTOOL_PASSWORD = $password
 try {
     & $keytool `
