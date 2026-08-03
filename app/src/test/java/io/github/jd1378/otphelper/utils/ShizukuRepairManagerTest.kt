@@ -34,6 +34,14 @@ class ShizukuRepairManagerTest {
   }
 
   @Test
+  fun rollbackCommandRestoresListenerAccess() {
+    assertEquals(
+        "cmd notification allow_listener '$listener'",
+        ShizukuRepairManager.buildListenerEnableCommand(listener),
+    )
+  }
+
+  @Test
   fun shellArgumentsAreSafelyQuoted() {
     val unusualPackage = "example.package'quoted"
     val commands = ShizukuRepairManager.buildRepairCommands(unusualPackage, listener, 35)
