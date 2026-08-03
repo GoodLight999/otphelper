@@ -7,6 +7,8 @@ param(
 
     [string]$Serial,
 
+    [string]$ExpectedCertificateSha256,
+
     [switch]$ConfirmRestore
 )
 
@@ -118,6 +120,85 @@ run-as cannot access $Package. The installed APK must be debuggable.
 For restoration, install the permanent-key DEBUG APK first; do not install a non-debuggable release APK until restoration is complete.
 $($result.StdErr)
 "@
+    }
+}
+
+function Normalize-CertificateSha256 {
+    param([Parameter(Mandatory)][string]$Value)
+
+    $normalized = ($Value -replace '[:\s]', '').ToLowerInvariant()
+    if ($normalized -notmatch '^[0-9a-f]{64}$') {
+        throw 'Certificate SHA-256 must contain exactly 64 hexadecimal digits.'
+    }
+    return $normalized
+}
+
+function Find-ApkSigner {
+    $command = Get-Command apksigner -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $sdkRoots = @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique
+    foreach ($sdkRoot in $sdkRoots) {
+        $buildToolsRoot = Join-Path $sdkRoot 'build-tools'
+        if (-not (Test-Path -LiteralPath $buildToolsRoot -PathType Container)) {
+            continue
+        }
+
+        $candidate = Get-ChildItem -LiteralPath $buildToolsRoot -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -in @('apksigner', 'apksigner.bat') } |
+            Sort-Object @{
+                Expression = {
+                    try { [version]$_.Directory.Name } catch { [version]'0.0' }
+                }
+            }, @{
+                Expression = { $_.FullName }
+            } -Descending |
+            Select-Object -First 1
+        if ($null -ne $candidate) {
+            return $candidate.FullName
+        }
+    }
+
+    throw 'apksigner was not found. Install Android SDK Build Tools or add apksigner to PATH.'
+}
+
+function Get-InstalledCertificateSha256 {
+    $packagePaths = @(Get-AdbText @('shell', 'pm', 'path', $Package) -split "`r?`n" |
+        ForEach-Object { $_ -replace '^package:', '' } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($packagePaths.Count -eq 0) {
+        throw "No installed APK path was returned for $Package."
+    }
+    $remoteApk = @($packagePaths | Where-Object { $_ -match '(^|/)base\.apk$' } | Select-Object -First 1)
+    if ($remoteApk.Count -eq 0) {
+        $remoteApk = @($packagePaths[0])
+    }
+
+    $temporaryApk = Join-Path ([System.IO.Path]::GetTempPath()) (
+        'otphelper-installed-' + [guid]::NewGuid().ToString('N') + '.apk'
+    )
+    try {
+        [void](Invoke-AdbText -Arguments @('pull', $remoteApk[0], $temporaryApk))
+        $apkSigner = Find-ApkSigner
+        $output = @(& $apkSigner verify --print-certs $temporaryApk 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "apksigner failed while reading the installed certificate:`n$($output -join "`n")"
+        }
+        $match = [regex]::Match(
+            ($output -join "`n"),
+            '(?im)^Signer #1 certificate SHA-256 digest:\s*([0-9a-f:]+)\s*$'
+        )
+        if (-not $match.Success) {
+            throw 'apksigner did not report a signer SHA-256 digest for the installed APK.'
+        }
+        return Normalize-CertificateSha256 $match.Groups[1].Value
+    }
+    finally {
+        Remove-Item -LiteralPath $temporaryApk -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -242,10 +323,17 @@ $fingerprint = Get-AdbText @('shell', 'getprop', 'ro.build.fingerprint')
 switch ($Action) {
     'Status' {
         $runAs = Invoke-AdbText -Arguments @('shell', 'run-as', $Package, 'id') -AllowFailure
+        $installedCertificate = try {
+            Get-InstalledCertificateSha256
+        }
+        catch {
+            "unavailable: $($_.Exception.Message)"
+        }
         [pscustomobject]@{
             DeviceSerial = $deviceSerial
             Fingerprint = $fingerprint
             PackageInstalled = $true
+            InstalledCertificateSha256 = $installedCertificate
             RunAsAvailable = ($runAs.ExitCode -eq 0 -and $runAs.StdOut -match 'uid=')
             NotificationListenerEnabled = Test-ListenerEnabled
             SensitiveNotificationAppOpAllowed = Test-SensitiveAppOpAllowed
@@ -308,6 +396,9 @@ switch ($Action) {
         if (-not $ConfirmRestore) {
             throw 'Restore clears the currently installed OTP Helper app data. Re-run with -ConfirmRestore after installing the permanent-key DEBUG APK.'
         }
+        if ([string]::IsNullOrWhiteSpace($ExpectedCertificateSha256)) {
+            throw 'Restore requires -ExpectedCertificateSha256 for the permanent signing identity.'
+        }
         Assert-RunAsAvailable
 
         $archivePath = Join-Path $BackupDirectory $ArchiveName
@@ -330,6 +421,18 @@ switch ($Action) {
         if ($actualHash -ne $metadata.archiveSha256) {
             throw "Backup archive SHA-256 mismatch. Expected $($metadata.archiveSha256), got $actualHash."
         }
+
+        $expectedCertificate = Normalize-CertificateSha256 $ExpectedCertificateSha256
+        $installedCertificate = Get-InstalledCertificateSha256
+        if ($installedCertificate -ne $expectedCertificate) {
+            throw @"
+Installed APK certificate mismatch. Refusing to clear app data.
+Expected permanent certificate: $expectedCertificate
+Installed APK certificate:      $installedCertificate
+Install the fixed-signed DEBUG APK produced from the permanent keystore, then retry Restore.
+"@
+        }
+        Write-Host "PASS Installed APK uses the expected permanent certificate: $installedCertificate"
 
         Write-Host 'Clearing the fresh installation before restoring private data...'
         [void](Invoke-AdbText -Arguments @('shell', 'pm', 'clear', $Package))
