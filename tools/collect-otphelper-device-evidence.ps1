@@ -288,17 +288,27 @@ $commands.Add((Save-CommandEvidence 'sensitive-notification-appop' @(
     'shell', 'cmd', 'appops', 'get', '--user', 'current', $Package,
     'RECEIVE_SENSITIVE_NOTIFICATIONS'
 )))
-$commands.Add((Save-ColonSettingPresenceEvidence \
-    -Name 'notification-listener-setting' \
-    -Setting 'enabled_notification_listeners' \
-    -AcceptedComponents $ListenerComponents))
-$commands.Add((Save-ColonSettingPresenceEvidence \
-    -Name 'accessibility-setting' \
-    -Setting 'enabled_accessibility_services' \
-    -AcceptedComponents $AccessibilityComponents))
-$commands.Add((Save-PackageLinePresenceEvidence \
-    -Name 'battery-whitelist' \
-    -Arguments @('shell', 'cmd', 'deviceidle', 'whitelist')))
+
+$listenerEvidence = @{
+    Name = 'notification-listener-setting'
+    Setting = 'enabled_notification_listeners'
+    AcceptedComponents = $ListenerComponents
+}
+$commands.Add((Save-ColonSettingPresenceEvidence @listenerEvidence))
+
+$accessibilityEvidence = @{
+    Name = 'accessibility-setting'
+    Setting = 'enabled_accessibility_services'
+    AcceptedComponents = $AccessibilityComponents
+}
+$commands.Add((Save-ColonSettingPresenceEvidence @accessibilityEvidence))
+
+$batteryWhitelistEvidence = @{
+    Name = 'battery-whitelist'
+    Arguments = @('shell', 'cmd', 'deviceidle', 'whitelist')
+}
+$commands.Add((Save-PackageLinePresenceEvidence @batteryWhitelistEvidence))
+
 $commands.Add((Save-CommandEvidence 'standby-bucket' @(
     'shell', 'am', 'get-standby-bucket', $Package
 )))
@@ -323,11 +333,13 @@ if ($IncludeRedactedLogcat) {
             "logcatCollected=false`n" +
             "reason=OTP Helper process is not currently running.`n"
         )
-        $commands.Add((New-EvidenceRecord \
-            -Name 'redacted-logcat' \
-            -ExitCode $pidResult.ExitCode \
-            -Arguments @('logcat', '-d', '-v', 'threadtime', '--pid', '<otphelper-pid>') \
-            -Path $path))
+        $logcatRecord = @{
+            Name = 'redacted-logcat'
+            ExitCode = $pidResult.ExitCode
+            Arguments = @('logcat', '-d', '-v', 'threadtime', '--pid', '<otphelper-pid>')
+            Path = $path
+        }
+        $commands.Add((New-EvidenceRecord @logcatRecord))
     }
 }
 
@@ -383,9 +395,11 @@ $manifest.files = $fileRecords
 Write-Utf8File -Path $manifestPath -Content (($manifest | ConvertTo-Json -Depth 8) + "`n")
 
 $manifestDigest = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Utf8File \
-    -Path (Join-Path $OutputDirectory 'evidence-manifest.sha256') \
-    -Content ("$manifestDigest  evidence-manifest.json`n")
+$manifestDigestParameters = @{
+    Path = (Join-Path $OutputDirectory 'evidence-manifest.sha256')
+    Content = "$manifestDigest  evidence-manifest.json`n"
+}
+Write-Utf8File @manifestDigestParameters
 
 Write-Host "Evidence collected: $OutputDirectory"
 Write-Host "Device: $manufacturer $model / Android $release (API $sdk)"
