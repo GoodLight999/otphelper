@@ -1,6 +1,6 @@
 # Current handoff — OTP Helper MagicOS fork
 
-**Status date:** 2026-08-03 JST  
+**Status date:** 2026-08-04 JST  
 **Repository:** `GoodLight999/otphelper`  
 **Implementation branch:** `agent/magicos-resilience-and-backup`  
 **Integration:** Draft PR #1  
@@ -14,6 +14,9 @@ The latest implementation includes:
 
 - MagicOS-oriented foreground persistence and recovery;
 - a visible, silent, low-priority foreground-service notification rather than a hidden/minimum-priority event;
+- a private `MainActivity` behind one exported MAIN/LAUNCHER alias;
+- private internal repair/settings Activity and notification-action Receiver surfaces;
+- explicit immutable PendingIntents for internal navigation and notification actions;
 - Recents visibility and HONOR System Manager fallback;
 - standard notification listener, notification-only Accessibility fallback, SMS path, and optional Shizuku repair;
 - complete individual/all phrase-list import and export;
@@ -23,6 +26,7 @@ The latest implementation includes:
 - explicit fork version suffixes: `-magic` and `-magic-play`;
 - normalized universal APK filenames;
 - Android system backup restricted to the DataStore settings object, excluding Room OTP history;
+- a redacted, manifest-hashed ADB evidence collector for HONOR physical checkpoints;
 - weekly upstream synchronization with durable conflict artifacts when a clean merge is impossible;
 - GitHub-prerelease-only fork distribution with APK checksums and public signing metadata;
 - API 35/36 emulator validation and multiple privacy/signing CI contracts.
@@ -41,21 +45,27 @@ The workflows use the current Node 24 generations of GitHub's official checkout,
 
 A successful Android CI proves:
 
+- all PowerShell maintenance tools parse, including signing, migration, and device-evidence helpers;
 - the permanent signing helper can generate and reopen a disposable JKS;
 - certificate SHA-256 and Base64 JKS output are coherent;
 - all five signing Secret values can be written to `gh secret set` through standard input without gaining a trailing newline;
 - normal/play unit tests and Lint pass;
 - all four APK variants build;
+- all four APKs are structurally valid and signed during validation;
 - normal APKs end in `-magic` and play APKs end in `-magic-play`;
 - debug APKs remain debuggable for the one-time migration;
 - release APKs are non-debuggable;
 - exact permission sets match the maintained allowlists;
 - INTERNET, ACCESS_NETWORK_STATE, and REQUEST_IGNORE_BATTERY_OPTIMIZATIONS are absent;
 - required persistence, listener, Accessibility, and Shizuku components exist;
+- exported surface is limited to the launcher alias and system-bound components;
+- `MainActivity`, internal actions, and notification actions remain private;
 - MainActivity is not excluded from Recents;
 - internal notification actions remain signature-protected;
 - LeakCanary and experiment fixtures are absent;
 - standard listener and Accessibility service actually bind on API 35 and API 36 emulators.
+
+When the permanent signing Secrets are absent, Android CI uses a disposable key only to make all four APKs inspectable, then explicitly refuses artifact upload. A disposable validation APK is never a distribution channel.
 
 It does **not** prove HONOR proprietary process-killer behavior or that a real third-party OTP body is exposed by Android privacy rules.
 
@@ -109,6 +119,8 @@ Minimum release-gating cases include:
 - first and second permanent-key in-place updates;
 - individual and complete phrase backup/restore.
 
+Use `tools/collect-otphelper-device-evidence.ps1` before and after persistence, reboot, recovery, and update cases. The collector records only package-scoped state, hashes the device serial by default, excludes notification/database contents, and creates a file-hashed manifest. Every failed case requires an in-app diagnostics export and an `after-fail` ADB evidence package.
+
 Explicit Android Force stop is recorded as a platform limit, not as an app persistence failure.
 
 ## Privacy contracts
@@ -118,7 +130,9 @@ Explicit Android Force stop is recorded as a platform limit, not as an app persi
 - That DataStore object includes phrase lists, behavior/UI settings, and the last Detection Test text.
 - Room OTP history is excluded from Android system backup.
 - ADB signing-migration archives may contain OTP history and must remain private.
-- JKS, keystore, Base64 key material, and ADB backup directories are ignored and rejected by CI if committed.
+- ADB physical-test evidence excludes database/settings contents and broad notification dumps.
+- Optional evidence logcat is PID-scoped and redacted, but must still be inspected before sharing.
+- JKS, keystore, Base64 key material, ADB backup directories, and physical evidence directories must not be committed.
 
 Full policy: [`DATA_BACKUP_POLICY.md`](DATA_BACKUP_POLICY.md).
 
@@ -132,11 +146,13 @@ Before accepting an upstream sync, review:
 
 - all Manifests and backup XML;
 - `App`, `MainActivity`, persistence components, and both notification services;
+- exported/private component boundaries and PendingIntents;
 - Shizuku API integration;
 - phrase screens, repositories, and DataStore schema;
 - Gradle dependencies and permission changes;
 - release/signing workflows;
 - exact APK permission and version-suffix contracts;
+- maintenance tools and their private-output ignore rules;
 - Japanese and English resources.
 
 ## Where to resume
@@ -146,12 +162,13 @@ Before accepting an upstream sync, review:
 3. Read the final section of the Notion project page for device-specific history.
 4. Inspect the current branch head rather than trusting an older SHA written in historical notes.
 5. Do not merge or publish solely because emulator CI is green.
+6. Do not uninstall the current physical-test APK before its ADB backup has been verified.
 
 ## Documentation index
 
 - [`FORK_MAINTENANCE.md`](FORK_MAINTENANCE.md) — architecture and maintenance rules
 - [`PLATFORM_CONTRACTS.md`](PLATFORM_CONTRACTS.md) — official API/AOSP/Shizuku basis
 - [`SIGNING_MIGRATION.md`](SIGNING_MIGRATION.md) — permanent signing runbook
-- [`HONOR_PHYSICAL_TEST_PLAN.md`](HONOR_PHYSICAL_TEST_PLAN.md) — physical validation matrix
+- [`HONOR_PHYSICAL_TEST_PLAN.md`](HONOR_PHYSICAL_TEST_PLAN.md) — physical validation matrix and evidence requirements
 - [`DATA_BACKUP_POLICY.md`](DATA_BACKUP_POLICY.md) — Android backup/privacy policy
-- [`../tools/README.md`](../tools/README.md) — operational helper commands
+- [`../tools/README.md`](../tools/README.md) — signing, migration, and evidence helper commands
