@@ -1,8 +1,8 @@
 # OTP Helper maintenance tools
 
-These PowerShell 7 helpers exist to make the one unavoidable signing transition reproducible and to prevent a mistaken APK from destroying the current app data.
+These PowerShell 7 helpers make the one unavoidable signing transition reproducible, prevent a mistaken APK from destroying the current app data, and collect consistent HONOR physical-test evidence without copying notification databases or broad notification dumps.
 
-Read [`../docs/SIGNING_MIGRATION.md`](../docs/SIGNING_MIGRATION.md) before using either tool.
+Read [`../docs/SIGNING_MIGRATION.md`](../docs/SIGNING_MIGRATION.md) before changing the signing identity. Read [`../docs/HONOR_PHYSICAL_TEST_PLAN.md`](../docs/HONOR_PHYSICAL_TEST_PLAN.md) before running physical release gates.
 
 ## `new-otphelper-signing-key.ps1`
 
@@ -122,3 +122,72 @@ After the certificate gate, Restore verifies the archive hash, clears the fresh 
 It deliberately does **not** automatically re-enable Accessibility. MagicOS App launch switches, the Recents lock, and Shizuku client permission may still need manual confirmation.
 
 After the restore is verified, a permanent-key release APK can update over the permanent-key debug APK because both are signed by the same fixed identity. A second higher-version fixed-key update must also be tested before declaring the update lineage complete.
+
+## `collect-otphelper-device-evidence.ps1`
+
+Read-only ADB evidence collector for HONOR physical test checkpoints. It gives each test case the same package/process/service/watchdog/AppOp evidence instead of relying on screenshots or an unbounded `dumpsys notification` dump.
+
+Requirements:
+
+- PowerShell 7;
+- current Android SDK Platform Tools with `adb` in `PATH`;
+- one authorized device, or an explicit `-Serial` value;
+- OTP Helper installed on the selected device.
+
+Capture a normal checkpoint and create a ZIP:
+
+```powershell
+pwsh ./tools/collect-otphelper-device-evidence.ps1 `
+  -TestLabel HN-08-after-pass `
+  -Compress
+```
+
+When several devices are connected:
+
+```powershell
+pwsh ./tools/collect-otphelper-device-evidence.ps1 `
+  -Serial '<adb-serial>' `
+  -TestLabel HN-14-after-fail `
+  -Compress
+```
+
+The default output directory contains a timestamp. The script refuses to reuse a non-empty directory. The raw device serial is replaced by a short SHA-256 identifier unless `-IncludeDeviceSerial` is deliberately supplied.
+
+Collected evidence includes:
+
+- build fingerprint, manufacturer, model, Android release/API, and security patch;
+- package dump and installed APK path;
+- process state and package-scoped Activity service state;
+- package exit history where supported;
+- package-scoped JobScheduler and AlarmManager state;
+- package AppOps and the sensitive-notification AppOp;
+- whether OTP Helper itself is present in notification-listener, Accessibility, and device-idle settings;
+- standby bucket and battery state;
+- private file **names/layout only** when the installed APK is debuggable.
+
+It does not collect:
+
+- Room database contents;
+- DataStore contents;
+- broad notification dumps;
+- notification text from other apps;
+- unrelated enabled-listener, Accessibility, or battery-whitelist package names.
+
+Logcat is excluded by default. For one narrowly scoped failure, it can be added with redaction:
+
+```powershell
+pwsh ./tools/collect-otphelper-device-evidence.ps1 `
+  -TestLabel HN-11-after-fail `
+  -IncludeRedactedLogcat `
+  -Compress
+```
+
+The optional log captures only the current OTP Helper PID and applies additional code/number/email/phone/token redaction. Inspect every archive before attaching it to a PR or sharing it outside the private project.
+
+Each evidence package includes:
+
+- `evidence-manifest.json` with command exit codes and file hashes;
+- `evidence-manifest.sha256` for the final manifest;
+- one UTF-8 file per evidence source.
+
+Recommended naming is `<case-id>-before`, `<case-id>-after-pass`, or `<case-id>-after-fail`. Keep the in-app redacted diagnostics export beside the ADB evidence package; the two sources answer different questions.
