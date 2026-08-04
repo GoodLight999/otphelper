@@ -102,7 +102,11 @@ function Assert-OneDevice {
         return
     }
 
-    $devices = @(Get-AdbText @('devices') -split "`r?`n" | Where-Object { $_ -match "\tdevice$" })
+    $deviceLines = Get-AdbText @('devices')
+    $devices = @(
+        ($deviceLines -split "`r?`n") |
+            Where-Object { $_ -match "\tdevice$" }
+    )
     if ($devices.Count -ne 1) {
         throw "Expected exactly one authorized ADB device, found $($devices.Count). Use -Serial when multiple devices are connected."
     }
@@ -131,11 +135,6 @@ function Protect-SensitiveText {
     )
     $protected = [regex]::Replace(
         $protected,
-        '(?<![\d.])\d{4,8}(?![\d.])',
-        '<redacted-number>'
-    )
-    $protected = [regex]::Replace(
-        $protected,
         '(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',
         '<redacted-email>'
     )
@@ -143,6 +142,11 @@ function Protect-SensitiveText {
         $protected,
         '(?<!\w)\+?[0-9][0-9 ()-]{7,}[0-9](?!\w)',
         '<redacted-phone>'
+    )
+    $protected = [regex]::Replace(
+        $protected,
+        '(?<![\d.])\d{4,8}(?![\d.])',
+        '<redacted-number>'
     )
     return $protected
 }
@@ -205,8 +209,10 @@ function Save-ColonSettingPresenceEvidence {
 
     $arguments = @('shell', 'settings', 'get', 'secure', $Setting)
     $result = Invoke-AdbText -Arguments $arguments -AllowFailure
+    $trimmedSetting = $result.StdOut.Trim()
+    $splitValues = $trimmedSetting -split ':'
     $values = @(
-        $result.StdOut.Trim() -split ':' |
+        $splitValues |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     )
     $matches = @($AcceptedComponents | Where-Object { $values -contains $_ })
@@ -230,8 +236,9 @@ function Save-PackageLinePresenceEvidence {
 
     $result = Invoke-AdbText -Arguments $Arguments -AllowFailure
     $escapedPackage = [regex]::Escape($Package)
+    $outputLines = $result.StdOut -split "`r?`n"
     $matchingLines = @(
-        $result.StdOut -split "`r?`n" |
+        $outputLines |
             Where-Object { $_ -match "(^|,)$escapedPackage(,|$)" }
     )
     $body = @(
