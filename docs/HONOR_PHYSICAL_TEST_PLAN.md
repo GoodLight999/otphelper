@@ -28,24 +28,42 @@ For every failed case, export the in-app diagnostics report immediately and name
 otphelper-<commit-short>-<case-id>-<yyyyMMdd-HHmm>-<pass-or-fail>.txt
 ```
 
-When ADB is available, also capture the narrow log window:
+When ADB is available, capture a standardized package before and after every persistence, reboot, update, or recovery case:
 
 ```powershell
-adb logcat -c
+pwsh ./tools/collect-otphelper-device-evidence.ps1 `
+  -TestLabel HN-08-before `
+  -Compress
+
 # perform exactly one test case
-adb logcat -d -v threadtime `
-  PersistenceService:I `
-  PersistenceWatchdog:I `
-  WatchdogReceiver:I `
-  BootReceiver:I `
-  NotificationListener:I `
-  AccessibilityNotif:I `
-  RebindListenersWorker:I `
-  ShizukuRepair:I `
-  '*:S' > otphelper-case-log.txt
+
+pwsh ./tools/collect-otphelper-device-evidence.ps1 `
+  -TestLabel HN-08-after-pass `
+  -Compress
 ```
 
-Do not include raw OTP values in issue or PR text. The built-in logger redacts code-like values, but inspect exported evidence before sharing it.
+Use `<case-id>-after-fail` for a failure. The collector records package/process/service, AlarmManager, JobScheduler, AppOp, listener, Accessibility, standby-bucket, and device-build state in a fixed format. It does not collect Room/DataStore contents, broad notification dumps, notification text from other apps, or unrelated listener/Accessibility/whitelist package names.
+
+Logcat is excluded by default. Add it only for one narrowly scoped failure while OTP Helper is running:
+
+```powershell
+pwsh ./tools/collect-otphelper-device-evidence.ps1 `
+  -TestLabel HN-11-after-fail `
+  -IncludeRedactedLogcat `
+  -Compress
+```
+
+The optional log is limited to the current OTP Helper PID and receives an additional numeric/code/email/phone/token redaction pass. The raw device serial is hashed by default. Inspect every diagnostic and evidence archive before attaching it to a PR or sharing it outside the private project.
+
+Recommended evidence pairs:
+
+- HN-08/HN-09/HN-10: immediately before screen-off idle and immediately after the OTP attempt;
+- HN-11/HN-12: immediately before process/task removal and after the recovery deadline;
+- HN-14: before reboot and after post-unlock stabilization;
+- HN-15/HN-16: before installation, immediately after installation, and after the first successful OTP;
+- any FAIL: `after-fail` package plus the in-app diagnostics export.
+
+Do not include raw OTP values in issue, PR, or Notion text.
 
 ## Baseline configuration
 
@@ -263,7 +281,8 @@ A fixed-signed APK may be described as a physical-test candidate only after:
 - HN-01 through HN-06 pass while unlocked;
 - HN-08, HN-11, HN-14, HN-15, and HN-16 pass;
 - HN-23 and HN-24 pass;
-- every failure has an exported diagnostic report and a disposition.
+- before/after evidence packages exist for HN-08, HN-11, HN-14, HN-15, and HN-16;
+- every failure has an exported diagnostic report, an `after-fail` evidence package, and a disposition.
 
 A general claim of MagicOS resilience additionally requires HN-09 and HN-10 on the target firmware.
 
@@ -274,7 +293,7 @@ Append each completed physical run to the Notion project page with:
 - commit and certificate fingerprint;
 - firmware build;
 - case results;
-- diagnostic artifact names;
+- diagnostic and ADB evidence artifact names;
 - unresolved failures;
 - exact settings changed during the run.
 
