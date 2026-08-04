@@ -24,13 +24,13 @@ jobs:
           persist-credentials: false
       - name: Verify backup privacy allowlists
         run: python3 .github/scripts/verify-backup-rules.py
-      - name: Reject committed private signing or app-data material
+      - name: Reject committed private signing, app-data, or device-evidence material
         shell: bash
         run: |
           set -euo pipefail
-          forbidden='(^|/)(otphelper-signing-output|otphelper-adb-backup)(/|$)|\.(jks|keystore)$|signing-keystore-base64.*\.txt$'
+          forbidden='(^|/)(otphelper-signing-output|otphelper-adb-backup|otphelper-device-evidence-[^/]*)(/|$)|\.(jks|keystore)$|signing-keystore-base64.*\.txt$|(^|/)evidence-manifest\.(json|sha256)$'
           if git ls-files | grep -Ei "$forbidden"; then
-            echo "Private signing or migration material must not be committed" >&2
+            echo "Private signing, migration, or physical-test evidence material must not be committed" >&2
             exit 1
           fi
 
