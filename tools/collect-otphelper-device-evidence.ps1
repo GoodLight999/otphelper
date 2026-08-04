@@ -19,6 +19,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $Package = 'io.github.jd1378.otphelper'
+$ListenerComponents = @(
+    "$Package/$Package.NotificationListener",
+    "$Package/.NotificationListener"
+)
+$AccessibilityComponents = @(
+    "$Package/$Package.AccessibilityNotificationService",
+    "$Package/.AccessibilityNotificationService"
+)
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 $adbCommand = Get-Command adb -ErrorAction SilentlyContinue
@@ -148,6 +156,22 @@ function Write-Utf8File {
     [System.IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
 }
 
+function New-EvidenceRecord {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][int]$ExitCode,
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    return [pscustomobject]@{
+        name = $Name
+        exitCode = $ExitCode
+        path = [System.IO.Path]::GetFileName($Path)
+        command = @($Arguments)
+    }
+}
+
 function Save-CommandEvidence {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -169,12 +193,59 @@ function Save-CommandEvidence {
 
     $path = Join-Path $OutputDirectory ($Name + '.txt')
     Write-Utf8File -Path $path -Content ($body + "`n")
-    return [pscustomobject]@{
-        name = $Name
-        exitCode = $result.ExitCode
-        path = [System.IO.Path]::GetFileName($path)
-        command = @($Arguments)
-    }
+    return New-EvidenceRecord -Name $Name -ExitCode $result.ExitCode -Arguments $Arguments -Path $path
+}
+
+function Save-ColonSettingPresenceEvidence {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Setting,
+        [Parameter(Mandatory)][string[]]$AcceptedComponents
+    )
+
+    $arguments = @('shell', 'settings', 'get', 'secure', $Setting)
+    $result = Invoke-AdbText -Arguments $arguments -AllowFailure
+    $values = @(
+        $result.StdOut.Trim() -split ':' |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    $matches = @($AcceptedComponents | Where-Object { $values -contains $_ })
+    $body = @(
+        "exitCode=$($result.ExitCode)",
+        "otpHelperPresent=$($matches.Count -gt 0)",
+        "matchedOtpHelperComponent=$($matches -join ',')",
+        "stderr=$($result.StdErr.Trim())"
+    ) -join "`n"
+
+    $path = Join-Path $OutputDirectory ($Name + '.txt')
+    Write-Utf8File -Path $path -Content ($body + "`n")
+    return New-EvidenceRecord -Name $Name -ExitCode $result.ExitCode -Arguments $arguments -Path $path
+}
+
+function Save-PackageLinePresenceEvidence {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string[]]$Arguments
+    )
+
+    $result = Invoke-AdbText -Arguments $Arguments -AllowFailure
+    $escapedPackage = [regex]::Escape($Package)
+    $matchingLines = @(
+        $result.StdOut -split "`r?`n" |
+            Where-Object { $_ -match "(^|,)$escapedPackage(,|$)" }
+    )
+    $body = @(
+        "exitCode=$($result.ExitCode)",
+        "otpHelperPresent=$($matchingLines.Count -gt 0)",
+        '--- matching OTP Helper lines only ---',
+        ($matchingLines -join "`n"),
+        '--- stderr ---',
+        $result.StdErr.TrimEnd()
+    ) -join "`n"
+
+    $path = Join-Path $OutputDirectory ($Name + '.txt')
+    Write-Utf8File -Path $path -Content ($body + "`n")
+    return New-EvidenceRecord -Name $Name -ExitCode $result.ExitCode -Arguments $Arguments -Path $path
 }
 
 function Get-Sha256Text {
@@ -217,15 +288,17 @@ $commands.Add((Save-CommandEvidence 'sensitive-notification-appop' @(
     'shell', 'cmd', 'appops', 'get', '--user', 'current', $Package,
     'RECEIVE_SENSITIVE_NOTIFICATIONS'
 )))
-$commands.Add((Save-CommandEvidence 'notification-listener-setting' @(
-    'shell', 'settings', 'get', 'secure', 'enabled_notification_listeners'
-) -Redact))
-$commands.Add((Save-CommandEvidence 'accessibility-setting' @(
-    'shell', 'settings', 'get', 'secure', 'enabled_accessibility_services'
-) -Redact))
-$commands.Add((Save-CommandEvidence 'battery-whitelist' @(
-    'shell', 'cmd', 'deviceidle', 'whitelist'
-) -Redact))
+$commands.Add((Save-ColonSettingPresenceEvidence \
+    -Name 'notification-listener-setting' \
+    -Setting 'enabled_notification_listeners' \
+    -AcceptedComponents $ListenerComponents))
+$commands.Add((Save-ColonSettingPresenceEvidence \
+    -Name 'accessibility-setting' \
+    -Setting 'enabled_accessibility_services' \
+    -AcceptedComponents $AccessibilityComponents))
+$commands.Add((Save-PackageLinePresenceEvidence \
+    -Name 'battery-whitelist' \
+    -Arguments @('shell', 'cmd', 'deviceidle', 'whitelist')))
 $commands.Add((Save-CommandEvidence 'standby-bucket' @(
     'shell', 'am', 'get-standby-bucket', $Package
 )))
@@ -236,10 +309,26 @@ $commands.Add((Save-CommandEvidence 'private-file-layout' @(
 ) -Redact))
 
 if ($IncludeRedactedLogcat) {
-    $commands.Add((Save-CommandEvidence 'redacted-logcat' @(
-        'logcat', '-d', '-v', 'threadtime', '--pid',
-        (Get-AdbText @('shell', 'pidof', '-s', $Package))
-    ) -Redact))
+    $pidResult = Invoke-AdbText -Arguments @('shell', 'pidof', '-s', $Package) -AllowFailure
+    $pid = $pidResult.StdOut.Trim()
+    if ($pidResult.ExitCode -eq 0 -and $pid -match '^\d+$') {
+        $commands.Add((Save-CommandEvidence 'redacted-logcat' @(
+            'logcat', '-d', '-v', 'threadtime', '--pid', $pid
+        ) -Redact))
+    }
+    else {
+        $path = Join-Path $OutputDirectory 'redacted-logcat.txt'
+        Write-Utf8File -Path $path -Content (
+            "exitCode=$($pidResult.ExitCode)`n" +
+            "logcatCollected=false`n" +
+            "reason=OTP Helper process is not currently running.`n"
+        )
+        $commands.Add((New-EvidenceRecord \
+            -Name 'redacted-logcat' \
+            -ExitCode $pidResult.ExitCode \
+            -Arguments @('logcat', '-d', '-v', 'threadtime', '--pid', '<otphelper-pid>') \
+            -Path $path))
+    }
 }
 
 $serialValue = if ($IncludeDeviceSerial) {
@@ -270,16 +359,17 @@ $manifest = [ordered]@{
         logcatIncluded = [bool]$IncludeRedactedLogcat
         logcatRedacted = [bool]$IncludeRedactedLogcat
         deviceSerialIncluded = [bool]$IncludeDeviceSerial
+        unrelatedListenerAndAccessibilityPackagesCollected = $false
+        unrelatedBatteryWhitelistPackagesCollected = $false
     }
     commands = @($commands)
     files = @()
 }
 
 $manifestPath = Join-Path $OutputDirectory 'evidence-manifest.json'
-Write-Utf8File -Path $manifestPath -Content (($manifest | ConvertTo-Json -Depth 8) + "`n")
-
 $fileRecords = @(
     Get-ChildItem -LiteralPath $OutputDirectory -File |
+        Where-Object { $_.Name -ne 'evidence-manifest.json' -and $_.Name -ne 'evidence-manifest.sha256' } |
         Sort-Object Name |
         ForEach-Object {
             [ordered]@{
@@ -292,6 +382,11 @@ $fileRecords = @(
 $manifest.files = $fileRecords
 Write-Utf8File -Path $manifestPath -Content (($manifest | ConvertTo-Json -Depth 8) + "`n")
 
+$manifestDigest = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Utf8File \
+    -Path (Join-Path $OutputDirectory 'evidence-manifest.sha256') \
+    -Content ("$manifestDigest  evidence-manifest.json`n")
+
 Write-Host "Evidence collected: $OutputDirectory"
 Write-Host "Device: $manufacturer $model / Android $release (API $sdk)"
 Write-Host 'Notification contents and OTP database contents were not collected.'
@@ -301,6 +396,6 @@ if ($Compress) {
     if (Test-Path -LiteralPath $archivePath) {
         throw "Evidence archive already exists: $archivePath"
     }
-    Compress-Archive -LiteralPath (Join-Path $OutputDirectory '*') -DestinationPath $archivePath
+    Compress-Archive -Path (Join-Path $OutputDirectory '*') -DestinationPath $archivePath
     Write-Host "Evidence archive: $archivePath"
 }
