@@ -69,7 +69,9 @@ jobs:
           EOF
           sha256sum export/otphelper-magic-clean-install-only.apk > export/APK_SHA256.txt
           unzip -t export/otphelper-magic-clean-install-only.apk >/dev/null
-          apksigner verify --verbose --print-certs export/otphelper-magic-clean-install-only.apk > export/APKSIGNER_REPORT.txt
+          apksigner_bin="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner -print | sort -V | tail -n 1)"
+          [[ -n "$apksigner_bin" && -x "$apksigner_bin" ]]
+          "$apksigner_bin" verify --verbose --print-certs export/otphelper-magic-clean-install-only.apk > export/APKSIGNER_REPORT.txt
       - name: Upload temporary APK
         uses: actions/upload-artifact@v7
         with:
