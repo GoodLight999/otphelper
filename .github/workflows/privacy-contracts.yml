@@ -33,6 +33,9 @@ jobs:
             echo "Private signing, migration, or physical-test evidence material must not be committed" >&2
             exit 1
           fi
+      - name: Execute device evidence privacy contract
+        shell: pwsh
+        run: ./.github/scripts/test-device-evidence-collector.ps1
 
   signing-bootstrap-contract:
     runs-on: ubuntu-latest
