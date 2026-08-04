@@ -37,7 +37,7 @@ jobs:
         run: |
           ./tools/new-otphelper-signing-key.ps1 `
             -OutputDirectory "$env:RUNNER_TEMP/otphelper-temp-signing" `
-            -ValidityYears 1 `
+            -ValidityYears 25 `
             -PasswordEnvironmentVariable OTPHELPER_TEMP_APK_PASSWORD `
             -ConfirmCreate
       - name: Build normal debug APK
