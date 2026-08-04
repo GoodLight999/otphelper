@@ -113,7 +113,7 @@ jobs:
           cache-provider: basic
       - name: Grant execute permission
         run: chmod +x gradlew .github/scripts/*.sh
-      - name: Prepare fixed distribution signing key
+      - name: Prepare fixed or disposable validation signing key
         id: signing
         shell: bash
         env:
@@ -126,8 +126,17 @@ jobs:
           set -euo pipefail
           if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" \
                 || -z "$KEY_PASSWORD" || -z "$CERT_SHA256" ]]; then
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Fixed signing secrets are incomplete. CI may test ephemeral builds, but no APK will be distributed."
+            key_path="$RUNNER_TEMP/otphelper-signing-smoke/otphelper-permanent-signing.jks"
+            if [[ ! -s "$key_path" ]]; then
+              echo "::error::Disposable signing smoke-test JKS is missing."
+              exit 1
+            fi
+            {
+              echo "available=false"
+              echo "path=$key_path"
+              echo "using_disposable=true"
+            } >> "$GITHUB_OUTPUT"
+            echo "::notice::Permanent signing Secrets are incomplete. All validation APKs use a disposable CI-only key and remain non-distributable."
             exit 0
           fi
 
@@ -137,6 +146,7 @@ jobs:
           {
             echo "available=true"
             echo "path=$key_path"
+            echo "using_disposable=false"
           } >> "$GITHUB_OUTPUT"
       - name: Verify fixed signing keystore
         if: steps.signing.outputs.available == 'true'
@@ -149,9 +159,9 @@ jobs:
       - name: Unit tests, lint, debug and release builds
         env:
           OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
-          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
-          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
-          OTPHELPER_KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD || 'ci-only-signing-smoke-password-2026' }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS || 'otphelper' }}
+          OTPHELPER_KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD || 'ci-only-signing-smoke-password-2026' }}
         run: >-
           ./gradlew --no-daemon
           :app:testNormalDebugUnitTest
@@ -170,10 +180,10 @@ jobs:
         env:
           OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
         run: .github/scripts/verify-fixed-signing.sh
-      - name: Refuse ephemeral APK distribution
-        if: steps.signing.outputs.available != 'true'
+      - name: Refuse disposable APK distribution
+        if: always() && steps.signing.outputs.available != 'true'
         run: >-
-          echo "Installable artifact upload intentionally disabled: fixed signing secrets are not configured."
+          echo "Installable artifact upload intentionally disabled: validation APKs use a disposable CI-only signing key."
       - name: Upload fixed-signed installable APKs
         if: success() && steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v7
