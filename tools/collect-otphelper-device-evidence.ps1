@@ -326,23 +326,23 @@ $commands.Add((Save-CommandEvidence 'private-file-layout' @(
 ) -Redact))
 
 if ($IncludeRedactedLogcat) {
-    $pidResult = Invoke-AdbText -Arguments @('shell', 'pidof', '-s', $Package) -AllowFailure
-    $pid = $pidResult.StdOut.Trim()
-    if ($pidResult.ExitCode -eq 0 -and $pid -match '^\d+$') {
+    $processIdResult = Invoke-AdbText -Arguments @('shell', 'pidof', '-s', $Package) -AllowFailure
+    $otpHelperProcessId = $processIdResult.StdOut.Trim()
+    if ($processIdResult.ExitCode -eq 0 -and $otpHelperProcessId -match '^\d+$') {
         $commands.Add((Save-CommandEvidence 'redacted-logcat' @(
-            'logcat', '-d', '-v', 'threadtime', '--pid', $pid
+            'logcat', '-d', '-v', 'threadtime', '--pid', $otpHelperProcessId
         ) -Redact))
     }
     else {
         $path = Join-Path $OutputDirectory 'redacted-logcat.txt'
         Write-Utf8File -Path $path -Content (
-            "exitCode=$($pidResult.ExitCode)`n" +
+            "exitCode=$($processIdResult.ExitCode)`n" +
             "logcatCollected=false`n" +
             "reason=OTP Helper process is not currently running.`n"
         )
         $logcatRecord = @{
             Name = 'redacted-logcat'
-            ExitCode = $pidResult.ExitCode
+            ExitCode = $processIdResult.ExitCode
             Arguments = @('logcat', '-d', '-v', 'threadtime', '--pid', '<otphelper-pid>')
             Path = $path
         }
