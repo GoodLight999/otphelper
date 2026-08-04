@@ -49,22 +49,17 @@ class ResilienceManifestTest {
     val activity = launchMainActivity()
     try {
       val tasks = activity.getSystemService(ActivityManager::class.java).appTasks
-      assertTrue("OTP Helper should own a visible recent task", tasks.isNotEmpty())
-      assertTrue(
-          "OTP Helper should have a task rooted in MainActivity",
-          tasks.any { task ->
+      val mainTasks =
+          tasks.filter { task ->
             task.taskInfo.baseIntent.component?.className == MainActivity::class.java.name
-          },
-      )
+          }
+      assertTrue("OTP Helper should own a visible recent task", tasks.isNotEmpty())
+      assertTrue("OTP Helper should have a task rooted in MainActivity", mainTasks.isNotEmpty())
       assertTrue(
           "OTP Helper's recent task must not use FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS",
-          tasks
-              .filter { task ->
-                task.taskInfo.baseIntent.component?.className == MainActivity::class.java.name
-              }
-              .all { task ->
-                task.taskInfo.baseIntent.flags and Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS == 0
-              },
+          mainTasks.all { task ->
+            task.taskInfo.baseIntent.flags and Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS == 0
+          },
       )
     } finally {
       finishActivity(activity)
@@ -160,15 +155,23 @@ class ResilienceManifestTest {
     assertTrue(info.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS != 0)
     assertTrue(info.flags and ActivityInfo.FLAG_NO_HISTORY != 0)
 
+    // UiAutomation.executeShellCommand does not itself interpret shell redirection. Invoke an
+    // explicit Android shell so stderr from ActivityManager is captured instead of passing
+    // "2>&1" to `am` as an ordinary argument.
     val externalAttempt =
         executeShellCommand(
-            "am start -W -n ${context.packageName}/.InternalActionActivity " +
-                "-a $INTENT_ACTION_REPAIR_BACKGROUND 2>&1")
+            "sh -c 'am start -W -n ${context.packageName}/.InternalActionActivity " +
+                "-a $INTENT_ACTION_REPAIR_BACKGROUND 2>&1; echo __EXIT__:\$?'",
+        )
     assertTrue(
         "Shell UID unexpectedly launched the private internal Activity: $externalAttempt",
         externalAttempt.contains("Permission Denial", ignoreCase = true) ||
             externalAttempt.contains("not exported", ignoreCase = true) ||
             externalAttempt.contains("SecurityException", ignoreCase = true),
+    )
+    assertFalse(
+        "ActivityManager reported success for a non-exported Activity: $externalAttempt",
+        externalAttempt.contains("__EXIT__:0"),
     )
 
     context.startActivity(
@@ -243,7 +246,8 @@ class ResilienceManifestTest {
     try {
       executeShellCommand(
           "cmd appops set --user current ${context.packageName} " +
-              "ACCESS_RESTRICTED_SETTINGS allow")
+              "ACCESS_RESTRICTED_SETTINGS allow",
+      )
       executeShellCommand("settings put secure enabled_accessibility_services $mergedServices")
       executeShellCommand("settings put secure accessibility_enabled 1")
 
@@ -270,7 +274,8 @@ class ResilienceManifestTest {
       }
       executeShellCommand(
           "cmd appops set --user current ${context.packageName} " +
-              "ACCESS_RESTRICTED_SETTINGS default")
+              "ACCESS_RESTRICTED_SETTINGS default",
+      )
     }
   }
 
