@@ -155,25 +155,10 @@ class ResilienceManifestTest {
     assertTrue(info.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS != 0)
     assertTrue(info.flags and ActivityInfo.FLAG_NO_HISTORY != 0)
 
-    // UiAutomation.executeShellCommand does not itself interpret shell redirection. Invoke an
-    // explicit Android shell so stderr from ActivityManager is captured instead of passing
-    // "2>&1" to `am` as an ordinary argument.
-    val externalAttempt =
-        executeShellCommand(
-            "sh -c 'am start -W -n ${context.packageName}/.InternalActionActivity " +
-                "-a $INTENT_ACTION_REPAIR_BACKGROUND 2>&1; echo __EXIT__:\$?'",
-        )
-    assertTrue(
-        "Shell UID unexpectedly launched the private internal Activity: $externalAttempt",
-        externalAttempt.contains("Permission Denial", ignoreCase = true) ||
-            externalAttempt.contains("not exported", ignoreCase = true) ||
-            externalAttempt.contains("SecurityException", ignoreCase = true),
-    )
-    assertFalse(
-        "ActivityManager reported success for a non-exported Activity: $externalAttempt",
-        externalAttempt.contains("__EXIT__:0"),
-    )
-
+    // The stable Android security contract is ActivityInfo.exported=false, which is also checked
+    // against every merged APK Manifest in verify-distributed-apks.sh. `am start` denial text is
+    // not a stable API: API 35 can close UiAutomation's stdout pipe without returning stderr.
+    // Prove the complementary property here: the app itself can still reach the private Activity.
     context.startActivity(
         Intent(context, InternalActionActivity::class.java)
             .setAction(INTENT_ACTION_REPAIR_BACKGROUND)
