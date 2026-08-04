@@ -18,9 +18,12 @@
 .cxx
 local.properties
 
-# Local-only signing and migration material. Never commit private keys or app-data archives.
+# Local-only signing, migration, and device evidence material.
+# Never commit private keys, app-data archives, or physical-test snapshots.
 /otphelper-signing-output/
 /otphelper-adb-backup/
+/otphelper-device-evidence-*/
+/otphelper-device-evidence-*.zip
 *.jks
 *.keystore
 *signing-keystore-base64*.txt
