@@ -10,10 +10,12 @@ import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.jd1378.otphelper.MyWorkManager.doCleanupPhrasesMigration
 import io.github.jd1378.otphelper.MyWorkManager.doDataMigration
+import io.github.jd1378.otphelper.MyWorkManager.doPhraseDefaultsMigration
 import io.github.jd1378.otphelper.MyWorkManager.enableHistoryCleanup
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.utils.ActivityHelper
 import io.github.jd1378.otphelper.utils.AppLogger
+import io.github.jd1378.otphelper.utils.PhraseDefaultsMigrator
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
@@ -48,14 +50,22 @@ class MainActivity : AppCompatActivity() {
           "MainActivity",
           "settings loaded: setupFinished=${settings.isSetupFinished}, " +
               "mode=${settings.modeOfOperation}, migrationDone=${settings.isMigrationDone}, " +
-              "cleanupPhrasesMigrated=${settings.isCleanupPhrasesMigrated}",
+              "cleanupPhrasesMigrated=${settings.isCleanupPhrasesMigrated}, " +
+              "phraseDefaultsVersion=${settings.phraseDefaultsVersion}",
       )
 
       if (!settings.isMigrationDone) {
+        // The legacy-data migration seeds the current phrase defaults and marks their version in the
+        // same atomic settings write, so no phrase-default upgrade is queued for a fresh migration.
         doDataMigration(applicationContext)
         enableHistoryCleanup(applicationContext)
-      } else if (!settings.isCleanupPhrasesMigrated) {
-        doCleanupPhrasesMigration(applicationContext)
+      } else {
+        if (!settings.isCleanupPhrasesMigrated) {
+          doCleanupPhrasesMigration(applicationContext)
+        }
+        if (settings.phraseDefaultsVersion < PhraseDefaultsMigrator.CURRENT_VERSION) {
+          doPhraseDefaultsMigration(applicationContext)
+        }
       }
     }
 
