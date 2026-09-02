@@ -12,11 +12,13 @@ import androidx.work.workDataOf
 import io.github.jd1378.otphelper.utils.getTimeToMidnightMillis
 import io.github.jd1378.otphelper.worker.DataCleanupWorker
 import io.github.jd1378.otphelper.worker.MigrateCleanupPhrasesWorker
+import io.github.jd1378.otphelper.worker.MigratePhraseDefaultsWorker
 import io.github.jd1378.otphelper.worker.MigrateWorker
 import io.github.jd1378.otphelper.worker.PersistenceWatchdogWorker
 import io.github.jd1378.otphelper.worker.RebindListenersWorker
 import io.github.jd1378.otphelper.worker.dataCleanupWorkName
 import io.github.jd1378.otphelper.worker.migrateCleanupPhrasesWorkName
+import io.github.jd1378.otphelper.worker.migratePhraseDefaultsWorkName
 import io.github.jd1378.otphelper.worker.migrateWorkName
 import io.github.jd1378.otphelper.worker.persistenceWatchdogWorkName
 import io.github.jd1378.otphelper.worker.rebindListenersWorkName
@@ -33,6 +35,12 @@ object MyWorkManager {
     val migrateWork = OneTimeWorkRequestBuilder<MigrateCleanupPhrasesWorker>().build()
     return WorkManager.getInstance(context)
         .enqueueUniqueWork(migrateCleanupPhrasesWorkName, ExistingWorkPolicy.KEEP, migrateWork)
+  }
+
+  fun doPhraseDefaultsMigration(context: Context): Operation {
+    val migrateWork = OneTimeWorkRequestBuilder<MigratePhraseDefaultsWorker>().build()
+    return WorkManager.getInstance(context)
+        .enqueueUniqueWork(migratePhraseDefaultsWorkName, ExistingWorkPolicy.KEEP, migrateWork)
   }
 
   fun enableHistoryCleanup(context: Context): Operation {
