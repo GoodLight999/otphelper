@@ -21,8 +21,14 @@ private const val WORD_END = "(?![\\p{L}\\p{N}_])"
 object CodeExtractorDefaults {
   val sensitivePhrases =
       persistentListOf(
-          "${WORD_START}code$WORD_END",
+          // High-confidence English authentication contexts. These intentionally precede the
+          // generic `code` fallback so candidate ranking gets the longest/strongest phrase.
+          "${WORD_START}(?:one[-\\s]?time|single[-\\s]?use|temporary)\\s+(?:password|passcode|code|PIN)$WORD_END",
+          "${WORD_START}(?:verification|security|confirmation|authentication|authorization|login|sign[-\\s]?in|access)\\s+(?:code|passcode|PIN)$WORD_END",
+          "${WORD_START}(?:your|the)\\s+(?:verification\\s+)?(?:code|passcode|PIN)$WORD_END",
           "${WORD_START}passcode$WORD_END",
+          "${WORD_START}MFA$WORD_END",
+          "${WORD_START}code$WORD_END",
           "One[-\\s]Time[-\\s]Password",
           "کد",
           "رمز",
@@ -52,7 +58,19 @@ object CodeExtractorDefaults {
           "\\bKods\\W",
           "\\b(?:m|sms)?TAN\\W",
           "\\bcodice\\W", // "code" in italian
-          "認証(?:用)?コード", // strong Japanese authentication context
+          // High-confidence Japanese contexts from the precision-first profile. Whitespace covers
+          // both ASCII and full-width Japanese spaces.
+          "(?:あなた|お客様|ご本人)の[\\s　]*(?:認証[\\s　]*)?(?:コード|パスコード)",
+          "(?:あなた|お客様|ご本人)の[\\s　]*認証[\\s　]*番号",
+          "(?:ワンタイム|一時|使い捨て)[\\s　]*(?:認証[\\s　]*)?(?:コード|パスワード|パスコード|暗証番号|キー)",
+          "認証[\\s　]*(?:コード|番号|パスコード|キー)",
+          "確認[\\s　]*(?:コード|パスコード|キー)",
+          "(?:本人確認|追加認証|二段階認証|2段階認証|多要素認証|ログイン|サインイン|セキュリティ|アクセス|確認用|認証用)[\\s　]*(?:コード|番号|パスコード|キー)",
+          "(?:以下|下記|次|こちら)の[\\s　]*(?:認証[\\s　]*)?(?:コード|番号|パスコード)",
+          "(?:コード|番号)[\\s　]*を[\\s　]*(?:入力|ご入力|使用)(?:してください|下さい)?",
+          "(?:ワンタイム|認証|確認|ログイン)[\\s　]*PIN",
+          "\\bPIN\\b(?=[\\s　]*(?:は|:|：|=|is\\b))",
+          "認証(?:用)?コード",
           "確認コード",
           "検証コード",
           "セキュリティコード",
@@ -61,8 +79,8 @@ object CodeExtractorDefaults {
           "ワンタイム(?:パス)?コード",
           "コード", // generic Japanese fallback; guarded by local non-OTP context checks below
           "パスワード", // generic Japanese fallback; preserves 3-D Secure style messages
-          "認証番号", // "authentication number" in japanese
-          "ワンタイム", // "one time" in japanese
+          "認証番号",
+          "ワンタイム",
           "\\bvahvistuskoodi", // "confirmation code" in finnish
           "\\bkertakäyttökoodisi\\W", // "your single-use code" in finnish
           "\\bkod\\W", // PL
@@ -97,7 +115,9 @@ object CodeExtractorDefaults {
           "تخفیفات",
           "تخفیفها",
           "takhfif",
-          "off",
+          // Raw `off` was too broad (e.g. "turn off VPN" in a real OTP notification). Keep the
+          // discount-specific form from the precision-first profile instead.
+          "\\d{1,3}%\\s*off",
           "اشتباه وارد شده",
           "RatingCode",
           "vscode",
@@ -126,12 +146,8 @@ object CodeExtractorDefaults {
   // because a real OTP can coexist with an order/reference/account number in one notification.
   val nonOtpContextPhrases =
       persistentListOf(
-          "クーポン(?:コード)?",
-          "プロモ(?:ーション)?コード",
-          "招待コード",
-          "紹介コード",
-          "商品コード",
-          "製品コード",
+          "(?:紹介|招待|クーポン|プロモーション|プロモ|キャンペーン|割引|商品|製品|エラー|ステータス|ソース|ドレス|カラー)[\\s　]*(?:コード|番号)",
+          "(?:バー|QR)[\\s　]*コード",
           "品番",
           "型番",
           "注文(?:番号|コード|ID)",
@@ -145,11 +161,14 @@ object CodeExtractorDefaults {
           "取引(?:番号|コード|ID)",
           "請求(?:番号|コード|ID)",
           "追跡(?:番号|コード|ID)",
+          "発送(?:番号|コード|ID)",
           "配送(?:番号|コード|ID)",
           "伝票番号",
           "チケット(?:番号|コード|ID)",
           "会員(?:番号|コード|ID)",
           "顧客(?:番号|コード|ID)",
+          "契約(?:番号|コード|ID)",
+          "端末(?:番号|コード|ID)",
           "口座(?:番号|コード|ID)",
           "カード(?:番号|コード|ID)",
           "電話(?:番号|コード)",
@@ -157,21 +176,28 @@ object CodeExtractorDefaults {
           "バージョン(?:番号|コード)?",
           "ビルド(?:番号|コード)?",
           "郵便番号",
-          "\\b(?:coupon|promo|promotion|discount|referral|invite|product|order|reference|ref|transaction|invoice|receipt|tracking|shipment|booking|reservation|ticket|member|customer|account|card|phone|telephone|serial|version|build|postal|zip)\\s*(?:code|id|number|no\\.?)\\b",
+          "\\b(?:coupon|promo|promotion|discount|referral|invite|gift|redeem(?:ption)?|product|item|color|qr|dress|source|error|status|order|reference|ref|request|application|transaction|invoice|receipt|tracking|shipment|booking|reservation|ticket|member|customer|contract|device|account|card|phone|telephone|serial|version|build|postal|zip|area|country)\\s*(?:code|id|number|no\\.?)\\b",
       )
 
   val strongOtpContextPhrases =
       persistentListOf(
-          "\\bOTP\\b",
-          "\\b2FA\\b",
+          "${WORD_START}(?:one[-\\s]?time|single[-\\s]?use|temporary)\\s+(?:password|passcode|code|PIN)$WORD_END",
+          "${WORD_START}(?:verification|security|confirmation|authentication|authorization|login|sign[-\\s]?in|access)\\s+(?:code|passcode|PIN)$WORD_END",
+          "${WORD_START}(?:your|the)\\s+(?:verification\\s+)?(?:code|passcode|PIN)$WORD_END",
+          "${WORD_START}OTP$WORD_END",
+          "${WORD_START}2FA$WORD_END",
+          "${WORD_START}MFA$WORD_END",
           "One[-\\s]?Time(?:[-\\s](?:Password|Passcode|Code))?",
-          "\\bverification\\s+code\\b",
-          "\\bauthentication\\s+code\\b",
-          "\\bsecurity\\s+code\\b",
-          "\\bconfirmation\\s+code\\b",
-          "\\blogin\\s+code\\b",
-          "\\bpasscode\\b",
+          "${WORD_START}passcode$WORD_END",
           "Best[aä]tigungscode",
+          "(?:あなた|お客様|ご本人)の[\\s　]*(?:認証[\\s　]*)?(?:コード|パスコード)",
+          "(?:あなた|お客様|ご本人)の[\\s　]*認証[\\s　]*番号",
+          "(?:ワンタイム|一時|使い捨て)[\\s　]*(?:認証[\\s　]*)?(?:コード|パスワード|パスコード|暗証番号|キー)",
+          "認証[\\s　]*(?:コード|番号|パスコード|キー)",
+          "確認[\\s　]*(?:コード|パスコード|キー)",
+          "(?:本人確認|追加認証|二段階認証|2段階認証|多要素認証|ログイン|サインイン|セキュリティ|アクセス|確認用|認証用)[\\s　]*(?:コード|番号|パスコード|キー)",
+          "(?:以下|下記|次|こちら)の[\\s　]*(?:認証[\\s　]*)?(?:コード|番号|パスコード)",
+          "(?:ワンタイム|認証|確認|ログイン)[\\s　]*PIN",
           "認証(?:番号|(?:用)?コード)",
           "確認コード",
           "検証コード",
@@ -324,7 +350,9 @@ class CodeExtractor // this comment is to separate parts
     val nonOtpDistance = nearestContextDistance(source, codeRange, nonOtpContextRegex)
     if (nonOtpDistance != null && strongDistance == null) return null
 
-    var score = PHRASE_PROXIMITY_SCORE - rangeDistance(phraseRange, codeRange).coerceAtMost(PHRASE_PROXIMITY_CAP)
+    var score =
+        PHRASE_PROXIMITY_SCORE -
+            rangeDistance(phraseRange, codeRange).coerceAtMost(PHRASE_PROXIMITY_CAP)
 
     if (strongDistance != null) {
       score += STRONG_CONTEXT_SCORE - strongDistance.coerceAtMost(STRONG_CONTEXT_DISTANCE_CAP)
@@ -359,8 +387,7 @@ class CodeExtractor // this comment is to separate parts
   private fun selectBestCandidate(candidates: List<Candidate>): Candidate? =
       candidates
           .sortedWith(
-              compareByDescending<Candidate> { it.score }
-                  .thenBy { it.match.range.first },
+              compareByDescending<Candidate> { it.score }.thenBy { it.match.range.first },
           )
           .firstOrNull()
 
