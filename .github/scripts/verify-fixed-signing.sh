@@ -1,11 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-expected="${OTPHELPER_SIGNING_CERT_SHA256:-}"
-expected="$(printf '%s' "$expected" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
-if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
-  echo "OTPHELPER_SIGNING_CERT_SHA256 must be a 64-digit SHA-256 certificate digest" >&2
+pinned_file="${OTPHELPER_PINNED_SIGNING_CERT_FILE:-.github/signing/otphelper-cert-sha256.txt}"
+if [[ ! -s "$pinned_file" ]]; then
+  echo "Pinned signing certificate file is missing or empty: $pinned_file" >&2
   exit 1
+fi
+
+expected="$(cat "$pinned_file" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Pinned signing certificate must be a 64-digit SHA-256 digest" >&2
+  exit 1
+fi
+
+declared="${OTPHELPER_SIGNING_CERT_SHA256:-}"
+if [[ -n "$declared" ]]; then
+  declared="$(printf '%s' "$declared" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+  if [[ "$declared" != "$expected" ]]; then
+    echo "Declared signing certificate conflicts with repository-pinned identity" >&2
+    echo "pinned=$expected" >&2
+    echo "declared=$declared" >&2
+    exit 1
+  fi
 fi
 
 apksigner=""
@@ -32,16 +48,12 @@ for apk in "${apks[@]}"; do
     | tr -d ':[:space:]' \
     | tr '[:upper:]' '[:lower:]')"
 
-  if "$apksigner" verify --verbose "$apk" | grep -q '^Verified using v1 scheme (JAR signing): false$'; then
-    : # v1 is optional on modern Android; the certificate check below is authoritative.
-  fi
-
   if [[ "$actual" != "$expected" ]]; then
     echo "Signing certificate mismatch: $apk" >&2
-    echo "expected=$expected" >&2
+    echo "pinned=$expected" >&2
     echo "actual=$actual" >&2
     exit 1
   fi
 
-  echo "Fixed signing certificate verified: $apk ($actual)"
+  echo "Pinned signing certificate verified: $apk ($actual)"
 done
