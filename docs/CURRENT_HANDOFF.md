@@ -1,174 +1,209 @@
 # Current handoff — OTP Helper MagicOS fork
 
-**Status date:** 2026-08-04 JST  
+**Status date:** 2026-09-02 JST  
 **Repository:** `GoodLight999/otphelper`  
 **Implementation branch:** `agent/magicos-resilience-and-backup`  
-**Integration:** Draft PR #1  
-**Upstream base:** `jd1378/otphelper@6fd3bbeffd50627dd57844493a8ab203ddd09fdc`
+**Integration:** Draft PR #1
 
-This file is the canonical current-state handoff. Historical investigation and test records remain in the Notion project page and PR discussion. When facts change, update this file rather than appending another contradictory “final” section elsewhere.
+This file is the canonical project handoff. Do **not** rely on ChatGPT thread memory as the sole source of truth. At every continuation, inspect the current branch HEAD and current upstream before trusting historical SHAs in this document.
 
-## Current branch state
+For the immediate next-thread execution contract, read [`NEXT_THREAD_2026-09-02.md`](NEXT_THREAD_2026-09-02.md) first.
 
-The latest implementation includes:
+## September 2 priority override
+
+Three items are now Priority 0 and must be handled before release:
+
+1. **New upstream version:** the user reported on 2026-09-02 that `jd1378/otphelper` has released a newer version than the previously verified upstream base `6fd3bbeffd50627dd57844493a8ab203ddd09fdc`. Refresh upstream `main`, releases/tags, and the exact release commit before integrating anything further.
+2. **Permanent signing identity:** the old installed APK's private signing key is lost, and the one-off clean-install APK was also signed with a disposable key. Neither is a viable future update lineage. Establish exactly one durable permanent signing identity and prove repeated in-place updates before release.
+3. **False-positive reduction / strong default recipe:** the user reports frequent erroneous OTP detections. The fork must ship safer detection behavior by default rather than requiring manual phrase tuning.
+
+The assistant is expected to own as much of the signing/upstream/recipe execution as the connected tools permit. If a connected service cannot perform a required secret write, state that precise capability boundary; do not report the signing problem as solved until the key has a durable recovery path and the fixed signer is actually exercised by CI.
+
+## Current implementation state
+
+The branch includes:
 
 - MagicOS-oriented foreground persistence and recovery;
-- a visible, silent, low-priority foreground-service notification rather than a hidden/minimum-priority event;
-- a private `MainActivity` behind one exported MAIN/LAUNCHER alias;
-- private internal repair/settings Activity and notification-action Receiver surfaces;
-- explicit immutable PendingIntents for internal navigation and notification actions;
-- Recents visibility and HONOR System Manager fallback;
-- standard notification listener, notification-only Accessibility fallback, SMS path, and optional Shizuku repair;
-- complete individual/all phrase-list import and export;
-- redacted diagnostics and actual service-connection tracking;
-- guarded permanent-signing bootstrap and ADB data migration;
-- exact normal/play debug/release APK permission contracts;
-- explicit fork version suffixes: `-magic` and `-magic-play`;
-- normalized universal APK filenames;
-- Android system backup restricted to the DataStore settings object, excluding Room OTP history;
-- a redacted, manifest-hashed ADB evidence collector for HONOR physical checkpoints;
-- weekly upstream synchronization with durable conflict artifacts when a clean merge is impossible;
-- GitHub-prerelease-only fork distribution with APK checksums and public signing metadata;
-- API 35/36 emulator validation and multiple privacy/signing CI contracts.
+- visible, silent, low-priority foreground-service notification;
+- private `MainActivity` behind one exported MAIN/LAUNCHER alias;
+- visible Recents task and HONOR/System Manager recovery paths;
+- foreground persistence service using `specialUse` and `START_STICKY`;
+- one-minute notification-listener heartbeat/rebind;
+- 15-minute WorkManager watchdog;
+- AlarmManager restart safety;
+- boot/user-unlock/package-replaced recovery;
+- actual listener connection state separated from permission state;
+- NotificationListener primary path;
+- notification-only Accessibility fallback;
+- shared duplicate suppression between ingestion paths;
+- SMS path in the normal flavor;
+- official Shizuku API/provider integration with a short-lived UserService for supported AppOp repair and rollback;
+- individual and all-in-one phrase import/export with versioned validation;
+- redacted diagnostics;
+- Android system backup restricted to DataStore settings, excluding Room OTP history;
+- private explicit immutable PendingIntents and signature-protected internal notification actions;
+- private internal action Activity and explicit private MainActivity deep links;
+- weekly upstream synchronization with durable conflict artifacts;
+- permanent-signing bootstrap and ADB migration tooling;
+- GitHub-prerelease-only release workflow, with no Play upload/AAB;
+- API 35/36 emulator validation and privacy/signing CI contracts;
+- package-scoped HONOR device evidence collection with serial pseudonymization and redaction.
 
-The branch remains **Draft / not distributable** until the permanent signing identity and HONOR physical release gates are complete.
+The branch remains **Draft / not distributable** until upstream refresh, permanent signing, safer OTP detection, and HONOR physical release gates are complete.
 
-## What is proven automatically
+## Strong default OTP recipe work
 
-The required workflows are:
+The current upstream-derived detector is too permissive in some contexts. In particular, generic Japanese signals such as `コード` and `パスワード` can occur near unrelated identifiers and cause false positives.
 
-1. **Test** — legacy Gradle build compatibility.
-2. **Android CI** — PowerShell parsing and signing-bootstrap execution, JVM tests, Lint, normal/play debug and minified release builds, APK inspection, API 35 and API 36 emulator tests.
-3. **Privacy contracts** — backup-rule allowlists, exact no-newline GitHub Secret transport through a fake `gh`, and rejection of committed private signing/migration material.
+Work started on 2026-09-02:
 
-The workflows use the current Node 24 generations of GitHub's official checkout, Java setup, artifact upload, and Gradle setup Actions. Gradle caching uses the explicit open-source/basic provider rather than duplicate setup-java and setup-gradle caches.
+- commit `6347fa4c6c4d0922cfa09b2ceafe20fc3f6cf14f` began false-positive regression coverage;
+- commit `263a8c91543b46e59adfc4416c4ac4a693485c67` added candidate-local context handling so a weak identifier and a real OTP in the same notification do not automatically select the wrong token.
 
-A successful Android CI proves:
+Required design:
 
-- all PowerShell maintenance tools parse, including signing, migration, and device-evidence helpers;
-- the permanent signing helper can generate and reopen a disposable JKS;
-- certificate SHA-256 and Base64 JKS output are coherent;
-- all five signing Secret values can be written to `gh secret set` through standard input without gaining a trailing newline;
-- normal/play unit tests and Lint pass;
-- all four APK variants build;
-- all four APKs are structurally valid and signed during validation;
-- normal APKs end in `-magic` and play APKs end in `-magic-play`;
-- debug APKs remain debuggable for the one-time migration;
-- release APKs are non-debuggable;
-- exact permission sets match the maintained allowlists;
-- INTERNET, ACCESS_NETWORK_STATE, and REQUEST_IGNORE_BATTERY_OPTIMIZATIONS are absent;
-- required persistence, listener, Accessibility, and Shizuku components exist;
-- exported surface is limited to the launcher alias and system-bound components;
-- `MainActivity`, internal actions, and notification actions remain private;
-- MainActivity is not excluded from Recents;
-- internal notification actions remain signature-protected;
-- LeakCanary and experiment fixtures are absent;
-- standard listener and Accessibility service actually bind on API 35 and API 36 emulators.
+- strong authentication phrases such as OTP / verification / authentication / login / confirmation / one-time password and strong Japanese equivalents should dominate;
+- order/product/reservation/tracking/build/version/promo/coupon/reference IDs, dates, times, prices, balances, points, phone numbers, hashes and UUID-like strings must not trigger merely because they resemble a code;
+- never globally discard a notification merely because it also contains a transaction/card/order identifier, because genuine OTP messages often include both;
+- evaluate candidate-local context and prefer the true authentication token when multiple number-like strings coexist;
+- preserve multilingual upstream true positives;
+- maintain regression tests for both false-positive suppression and true-positive preservation;
+- safer behavior should be present on fresh install and remain effective after restoring older settings where architecture permits.
 
-When the permanent signing Secrets are absent, Android CI uses a disposable key only to make all four APKs inspectable, then explicitly refuses artifact upload. A disposable validation APK is never a distribution channel.
+When integrating the new upstream release, inspect whether it changed `CodeExtractor`, default phrase lists, DataStore migrations, or tests. Re-apply the behavior against the new implementation rather than blindly retaining the old regex structure.
 
-It does **not** prove HONOR proprietary process-killer behavior or that a real third-party OTP body is exposed by Android privacy rules.
+## Permanent signing state and rules
 
-## Permanent signing blocker
+Cryptographic state:
 
-The physical-test APK installed on the HONOR device was signed by an ephemeral GitHub Actions debug key. That private key no longer exists, so no future APK can update it in place.
+- the private key for the currently installed old APK is unavailable;
+- therefore a new APK cannot cryptographically update that installation in place;
+- a previous one-off downloadable APK was generated with another disposable one-run key and is clean-install-only;
+- that disposable APK should be retired from the permanent lineage;
+- do **not** uninstall the currently installed old APK until its phrase/private-data backup has been verified.
 
-Do not distribute another ephemeral-key APK.
+Required permanent sequence:
 
-Required sequence:
+1. preserve phrase exports and verify the ADB private-data backup while the old debuggable APK still exists;
+2. create exactly one permanent RSA-4096 JKS with long validity;
+3. create at least two independently recoverable encrypted backups of the JKS and credentials;
+4. record the public certificate SHA-256 separately;
+5. persist the five signing values required by Actions:
+   - `OTPHELPER_SIGNING_KEYSTORE_B64`
+   - `OTPHELPER_KEYSTORE_PASSWORD`
+   - `OTPHELPER_KEY_ALIAS`
+   - `OTPHELPER_KEY_PASSWORD`
+   - `OTPHELPER_SIGNING_CERT_SHA256`
+6. require CI's fixed-keystore pre-build verification to execute;
+7. require every generated APK certificate to match the pinned SHA-256;
+8. only after backup verification, replace the old-signature installation with the permanent-key debug APK and restore via `-ExpectedCertificateSha256`;
+9. prove debug -> release in-place update;
+10. prove a second higher-version in-place update using the same signer;
+11. reject any future build whose signer differs from the pinned permanent certificate.
 
-1. preserve phrase-list exports;
-2. run the ADB private-data backup while the current APK is still installed and debuggable;
-3. generate one permanent JKS with `tools/new-otphelper-signing-key.ps1`;
-4. create at least two independently encrypted backups of the JKS and password;
-5. configure the five GitHub Actions signing Secrets;
-6. require fixed-certificate verification to run and pass in CI;
-7. install the fixed-signed normal debug APK after uninstalling the old-signature APK;
-8. restore with `-ExpectedCertificateSha256` so data cannot be cleared under the wrong signer;
-9. update debug → release in place;
-10. perform a second higher-version in-place update.
+Never call signing solved if the only copy of the private key lives in an ephemeral execution environment.
 
 Full procedure: [`SIGNING_MIGRATION.md`](SIGNING_MIGRATION.md).
 
-## Fork release boundary
+## Automated validation already established
 
-The fixed-signed release workflow:
+Required workflows:
 
-- runs manually or when a GitHub **prerelease** is created;
-- refuses to run when any signing Secret is absent;
-- verifies every APK against the pinned certificate;
-- publishes normal and play release APKs only;
-- includes `SHA256SUMS.txt` and `release-metadata.json` with the source commit and public certificate SHA-256;
-- uploads assets with the repository-scoped GitHub CLI rather than a third-party release Action;
-- never creates or uploads a Google Play App Bundle.
+1. **Test** — upstream-compatible Gradle build/test path.
+2. **Android CI** — PowerShell parsing/signing bootstrap, JVM tests, Lint, normal/play debug and minified release builds, APK inspection, API 35/36 instrumentation.
+3. **Privacy contracts** — backup allowlists, signing-secret transport contracts, rejection of committed private signing/migration material, evidence-collector tests.
 
-The fork uses an independent signing identity and is not an update path for upstream/F-Droid/Google Play installations.
+A green run can prove the maintained static/emulator contracts, including:
 
-## HONOR physical blocker
+- signing helper generation/reopen logic;
+- certificate SHA-256/Base64 coherence;
+- all four APK structures/signatures;
+- normal/play version suffixes;
+- debug/release debuggable contracts;
+- exact permission allowlists;
+- absence of INTERNET/ACCESS_NETWORK_STATE/REQUEST_IGNORE_BATTERY_OPTIMIZATIONS;
+- persistence/listener/Accessibility/Shizuku components;
+- restricted exported/private surfaces;
+- Recents contract;
+- signature-protected internal actions;
+- API 35/36 listener and Accessibility binding.
 
-Run the exact firmware matrix in [`HONOR_PHYSICAL_TEST_PLAN.md`](HONOR_PHYSICAL_TEST_PLAN.md).
+When permanent signing values are absent, ordinary CI may use a disposable key only for structural validation and must refuse user-facing installable artifact distribution. A disposable validation signature is never the release lineage.
 
-Minimum release-gating cases include:
+CI does **not** prove HONOR proprietary process-killer behavior or real third-party OTP body visibility.
 
-- visible and lockable Recents task;
-- usable App launch/System Manager path;
+## Disposable APK status
+
+A previous one-off workflow produced an installable clean-install APK solely because the user needed a concrete artifact during development. Its signer is disposable and it is **not** the permanent release/update identity. Do not publish it as the final fork and do not build migration assumptions around its certificate.
+
+The currently installed old APK is different: retain it until data backup verification because it may contain data that needs migration.
+
+## HONOR physical release gate
+
+Run the exact matrix in [`HONOR_PHYSICAL_TEST_PLAN.md`](HONOR_PHYSICAL_TEST_PLAN.md).
+
+Minimum required physical cases:
+
+- launcher/Recents behavior and Recents lockability;
+- MagicOS/System Manager recovery guidance;
 - real third-party OTP through standard listener;
 - Accessibility-only fallback;
-- duplicate suppression with both paths enabled;
-- 30-minute idle, task removal, and reboot-before-launch;
-- first and second permanent-key in-place updates;
-- individual and complete phrase backup/restore.
+- duplicate suppression with multiple paths enabled;
+- idle/Doze, task removal, and reboot-before-launch;
+- phrase backup/restore;
+- permanent-key first and second in-place updates;
+- standardized before/after evidence packages.
 
-Use `tools/collect-otphelper-device-evidence.ps1` before and after persistence, reboot, recovery, and update cases. The collector records only package-scoped state, hashes the device serial by default, excludes notification/database contents, and creates a file-hashed manifest. Every failed case requires an in-app diagnostics export and an `after-fail` ADB evidence package.
+Use `tools/collect-otphelper-device-evidence.ps1` at persistence/reboot/recovery/update checkpoints. Evidence is package-scoped, serial-hashed by default, excludes Room/DataStore contents and broad notification dumps, and includes file hashes/manifest digest.
 
-Explicit Android Force stop is recorded as a platform limit, not as an app persistence failure.
+Explicit Android Force stop remains a platform limit rather than an app persistence failure.
 
-## Privacy contracts
+## Privacy boundaries
 
-- The APK has no internet or network-state permission.
-- Android cloud backup and device transfer include only `files/datastore/`.
-- That DataStore object includes phrase lists, behavior/UI settings, and the last Detection Test text.
-- Room OTP history is excluded from Android system backup.
+- APK has no internet/network-state permission.
+- Android cloud/device-transfer backup includes only `files/datastore/`.
+- Room OTP history is excluded from system backup.
 - ADB signing-migration archives may contain OTP history and must remain private.
-- ADB physical-test evidence excludes database/settings contents and broad notification dumps.
-- Optional evidence logcat is PID-scoped and redacted, but must still be inspected before sharing.
-- JKS, keystore, Base64 key material, ADB backup directories, and physical evidence directories must not be committed.
+- Physical evidence excludes database/settings contents and broad notification dumps.
+- Optional logcat is PID-scoped and redacted but must still be inspected before sharing.
+- JKS, Base64 private key material, signing passwords, ADB backup directories, and physical evidence directories must not be committed publicly.
 
 Full policy: [`DATA_BACKUP_POLICY.md`](DATA_BACKUP_POLICY.md).
 
-## Upstream maintenance
+## Upstream integration rule
 
-The scheduled workflow merges `jd1378/otphelper:main` into a dated bot branch and opens a Draft PR for clean merges. Pull-request workflows perform validation automatically.
-
-GitHub Issues are disabled in this repository. A merge conflict therefore produces a 90-day `upstream-sync-conflict` artifact containing base/upstream SHAs, unmerged paths, and Git status; the workflow then fails visibly and writes the report to the job summary.
-
-Before accepting an upstream sync, review:
+Before accepting the new upstream version, review at minimum:
 
 - all Manifests and backup XML;
-- `App`, `MainActivity`, persistence components, and both notification services;
-- exported/private component boundaries and PendingIntents;
-- Shizuku API integration;
-- phrase screens, repositories, and DataStore schema;
-- Gradle dependencies and permission changes;
+- `App`, `MainActivity`, persistence components, NotificationListener and Accessibility service;
+- exported/private boundaries and PendingIntents;
+- Shizuku integration;
+- `CodeExtractor`, detection defaults and detection tests;
+- phrase screens, repositories and DataStore schema/migrations;
+- Gradle/dependency/permission changes;
 - release/signing workflows;
-- exact APK permission and version-suffix contracts;
-- maintenance tools and their private-output ignore rules;
+- maintenance tools and private-output ignore rules;
 - Japanese and English resources.
 
-## Where to resume
+Resolve conflicts deliberately and rerun all current CI gates.
 
-1. Read this file.
-2. Read the latest Draft PR #1 conversation and workflow results.
-3. Read the final section of the Notion project page for device-specific history.
-4. Inspect the current branch head rather than trusting an older SHA written in historical notes.
-5. Do not merge or publish solely because emulator CI is green.
-6. Do not uninstall the current physical-test APK before its ADB backup has been verified.
+## Where to resume in a new thread
+
+1. Read [`NEXT_THREAD_2026-09-02.md`](NEXT_THREAD_2026-09-02.md).
+2. Read this file.
+3. Read Draft PR #1 and current workflow results.
+4. Inspect the current branch HEAD; do not trust a historical hard-coded head SHA.
+5. Refresh current upstream `main` plus releases/tags before merging.
+6. Continue Priority 0 upstream/signing/recipe work without asking the user to repeat project history.
+7. Do not merge/publish solely because emulator CI is green.
+8. Do not uninstall the old physical APK before verified backup.
 
 ## Documentation index
 
-- [`FORK_MAINTENANCE.md`](FORK_MAINTENANCE.md) — architecture and maintenance rules
-- [`PLATFORM_CONTRACTS.md`](PLATFORM_CONTRACTS.md) — official API/AOSP/Shizuku basis
-- [`SIGNING_MIGRATION.md`](SIGNING_MIGRATION.md) — permanent signing runbook
-- [`HONOR_PHYSICAL_TEST_PLAN.md`](HONOR_PHYSICAL_TEST_PLAN.md) — physical validation matrix and evidence requirements
-- [`DATA_BACKUP_POLICY.md`](DATA_BACKUP_POLICY.md) — Android backup/privacy policy
-- [`../tools/README.md`](../tools/README.md) — signing, migration, and evidence helper commands
+- [`NEXT_THREAD_2026-09-02.md`](NEXT_THREAD_2026-09-02.md) — immediate continuation contract
+- [`FORK_MAINTENANCE.md`](FORK_MAINTENANCE.md) — architecture/maintenance rules
+- [`PLATFORM_CONTRACTS.md`](PLATFORM_CONTRACTS.md) — platform API basis
+- [`SIGNING_MIGRATION.md`](SIGNING_MIGRATION.md) — permanent signing/migration runbook
+- [`HONOR_PHYSICAL_TEST_PLAN.md`](HONOR_PHYSICAL_TEST_PLAN.md) — physical validation matrix
+- [`DATA_BACKUP_POLICY.md`](DATA_BACKUP_POLICY.md) — backup/privacy policy
+- [`../tools/README.md`](../tools/README.md) — signing, migration and evidence helper commands
