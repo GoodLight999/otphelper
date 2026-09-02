@@ -28,7 +28,7 @@ jobs:
         shell: pwsh
         run: |
           $failed = $false
-          Get-ChildItem -Path tools -Filter '*.ps1' -Recurse -File | ForEach-Object {
+          Get-ChildItem -Path tools,.github/scripts -Filter '*.ps1' -Recurse -File | ForEach-Object {
             $tokens = $null
             $parseErrors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(
@@ -52,61 +52,7 @@ jobs:
           java-version: "17"
       - name: Smoke test permanent signing bootstrap
         shell: pwsh
-        env:
-          OTPHELPER_TEST_SIGNING_PASSWORD: ci-only-signing-smoke-password-2026
-        run: |
-          $output = Join-Path $env:RUNNER_TEMP 'otphelper-signing-smoke'
-          ./tools/new-otphelper-signing-key.ps1 `
-            -OutputDirectory $output `
-            -ValidityYears 25 `
-            -PasswordEnvironmentVariable OTPHELPER_TEST_SIGNING_PASSWORD `
-            -ConfirmCreate
-
-          $manifest = Get-Content -LiteralPath (Join-Path $output 'manifest.json') -Raw |
-            ConvertFrom-Json
-          if ($manifest.schema -ne 'otphelper.signing-bootstrap' -or $manifest.version -ne 1) {
-            throw 'Signing bootstrap emitted invalid manifest metadata.'
-          }
-          if ($manifest.alias -ne 'otphelper') {
-            throw 'Signing bootstrap emitted an unexpected key alias.'
-          }
-
-          $fingerprint = (Get-Content -LiteralPath (
-            Join-Path $output 'otphelper-signing-certificate-sha256.txt'
-          ) -Raw).Trim()
-          if ($fingerprint -notmatch '^[0-9a-f]{64}$') {
-            throw 'Signing bootstrap emitted an invalid certificate SHA-256.'
-          }
-          if ($manifest.certificateSha256 -ne $fingerprint) {
-            throw 'Signing bootstrap manifest fingerprint does not match the fingerprint file.'
-          }
-
-          $keystore = Join-Path $output 'otphelper-permanent-signing.jks'
-          $encoded = Get-Content -LiteralPath (
-            Join-Path $output 'otphelper-signing-keystore-base64.txt'
-          ) -Raw
-          $decoded = Join-Path $env:RUNNER_TEMP 'otphelper-signing-smoke-decoded.jks'
-          [System.IO.File]::WriteAllBytes($decoded, [Convert]::FromBase64String($encoded.Trim()))
-          $originalHash = (Get-FileHash -LiteralPath $keystore -Algorithm SHA256).Hash
-          $decodedHash = (Get-FileHash -LiteralPath $decoded -Algorithm SHA256).Hash
-          if ($originalHash -ne $decodedHash) {
-            throw 'Base64 keystore output does not reconstruct the generated JKS.'
-          }
-
-          $env:OTPHELPER_KEYTOOL_PASSWORD = $env:OTPHELPER_TEST_SIGNING_PASSWORD
-          try {
-            & keytool `
-              -list `
-              -keystore $keystore `
-              -alias otphelper `
-              -storepass:env OTPHELPER_KEYTOOL_PASSWORD
-            if ($LASTEXITCODE -ne 0) {
-              throw 'keytool could not reopen the generated JKS.'
-            }
-          }
-          finally {
-            Remove-Item Env:OTPHELPER_KEYTOOL_PASSWORD -ErrorAction SilentlyContinue
-          }
+        run: ./.github/scripts/test-signing-bootstrap.ps1
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -121,11 +67,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
-          CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
         run: |
           set -euo pipefail
-          if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" \
-                || -z "$KEY_PASSWORD" || -z "$CERT_SHA256" ]]; then
+          if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
             key_path="$RUNNER_TEMP/otphelper-signing-smoke/otphelper-permanent-signing.jks"
             if [[ ! -s "$key_path" ]]; then
               echo "::error::Disposable signing smoke-test JKS is missing."
@@ -136,7 +80,7 @@ jobs:
               echo "path=$key_path"
               echo "using_disposable=true"
             } >> "$GITHUB_OUTPUT"
-            echo "::notice::Permanent signing Secrets are incomplete. All validation APKs use a disposable CI-only key and remain non-distributable."
+            echo "::notice::Permanent signing Secrets are incomplete. Validation APKs use a disposable CI-only key and remain non-distributable."
             exit 0
           fi
 
@@ -154,7 +98,6 @@ jobs:
           OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
           OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
           OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
-          OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
         run: .github/scripts/verify-signing-keystore.sh
       - name: Unit tests, lint, debug and release builds
         env:
@@ -177,8 +120,6 @@ jobs:
         run: .github/scripts/verify-distributed-apks.sh
       - name: Verify fixed signing certificate
         if: steps.signing.outputs.available == 'true'
-        env:
-          OTPHELPER_SIGNING_CERT_SHA256: ${{ secrets.OTPHELPER_SIGNING_CERT_SHA256 }}
         run: .github/scripts/verify-fixed-signing.sh
       - name: Refuse disposable APK distribution
         if: always() && steps.signing.outputs.available != 'true'
