@@ -12,13 +12,21 @@ data class CodeExtractorResult(
   val codeGroup: Int,
 )
 
+// Java/Kotlin's traditional \b handling is not reliable enough for all scripts used by OTP
+// providers. These boundaries explicitly treat every Unicode letter/number/underscore as a word
+// character, matching the upstream 1.20.6 fix without sacrificing CJK phrases that have no spaces.
+private const val WORD_START = "(?<![\\p{L}\\p{N}_])"
+private const val WORD_END = "(?![\\p{L}\\p{N}_])"
+
 object CodeExtractorDefaults {
   val sensitivePhrases =
       persistentListOf(
-          "code",
+          "${WORD_START}code$WORD_END",
+          "${WORD_START}passcode$WORD_END",
           "One[-\\s]Time[-\\s]Password",
           "کد",
           "رمز",
+          "شناسه\\s+تا[یي][یي]د", // "confirmation id" in persian; upstream 1.20.6
           "\\bOTP\\W",
           "\\b2FA\\W",
           "Einmalkennwort",
@@ -33,11 +41,12 @@ object CodeExtractorDefaults {
           "驗證",
           "код",
           "סיסמ",
-          "\\bהקוד\\W",
-          "\\bקוד\\W",
+          "${WORD_START}הקוד$WORD_END",
+          "${WORD_START}קוד$WORD_END",
           "\\bKodu\\W", // "code" in turkish
           "\\bKodunuz\\W", // "your code" in turkish
           "\\b[sş]ifre:\\W", // "password" in turkish
+          "${WORD_START}[sş]ifreniz$WORD_END", // "your password" in turkish; upstream main
           "\\bKodi\\W",
           "\\bKods\\W",
           "\\b(?:m|sms)?TAN\\W",
@@ -58,7 +67,7 @@ object CodeExtractorDefaults {
           "\\bkod\\W", // PL
           "\\bautoryzacji\\W", // PL
           "Parol\\s+dlya\\s+podtverzhdeniya", // russian
-          "\\bпароль\\W", // russian
+          "${WORD_START}пароль$WORD_END", // russian; Unicode-aware upstream boundary
           "인증번호", // "authentication number" in korean
       )
 
@@ -84,6 +93,8 @@ object CodeExtractorDefaults {
   val ignoredPhrases =
       persistentListOf(
           "تخفیف",
+          "تخفیفات",
+          "تخفیفها",
           "takhfif",
           "off",
           "اشتباه وارد شده",
@@ -110,9 +121,9 @@ object CodeExtractorDefaults {
       )
 
   // Contexts that commonly contain code-like identifiers but are not authentication codes.
-  // These are deliberately NOT exposed as global ignore phrases: a real OTP notification can
-  // mention an order/account identifier elsewhere in the same message. Each extracted candidate
-  // is judged against only its local left-hand context.
+  // This follows the same principle used by mature SMS rule engines: competing identifiers are
+  // classified locally instead of globally blacklisting the whole message, because a real OTP can
+  // coexist with an order/reference/account number in the same notification.
   val nonOtpContextPhrases =
       persistentListOf(
           "クーポン(?:コード)?",
@@ -129,17 +140,24 @@ object CodeExtractorDefaults {
           "受付番号",
           "お問い合わせ番号",
           "問合せ番号",
+          "参照(?:番号|コード|ID)",
+          "照会(?:番号|コード|ID)",
+          "取引(?:番号|コード|ID)",
+          "請求(?:番号|コード|ID)",
           "追跡(?:番号|コード|ID)",
           "配送(?:番号|コード|ID)",
           "伝票番号",
           "チケット(?:番号|コード|ID)",
-          "会員番号",
-          "顧客番号",
+          "会員(?:番号|コード|ID)",
+          "顧客(?:番号|コード|ID)",
+          "口座(?:番号|コード|ID)",
+          "カード(?:番号|コード|ID)",
+          "電話(?:番号|コード)",
           "シリアル(?:番号|コード)",
           "バージョン(?:番号|コード)?",
           "ビルド(?:番号|コード)?",
           "郵便番号",
-          "\\b(?:coupon|promo|promotion|discount|referral|invite|product|order|tracking|shipment|booking|reservation|ticket|serial|version|build|postal|zip)\\s*(?:code|id|number)\\b",
+          "\\b(?:coupon|promo|promotion|discount|referral|invite|product|order|reference|ref|transaction|invoice|receipt|tracking|shipment|booking|reservation|ticket|member|customer|account|card|phone|telephone|serial|version|build|postal|zip)\\s*(?:code|id|number|no\\.?)\\b",
       )
 
   val strongOtpContextPhrases =
@@ -152,6 +170,7 @@ object CodeExtractorDefaults {
           "\\bsecurity\\s+code\\b",
           "\\bconfirmation\\s+code\\b",
           "\\blogin\\s+code\\b",
+          "\\bpasscode\\b",
           "認証(?:番号|(?:用)?コード)",
           "確認コード",
           "検証コード",
@@ -159,6 +178,14 @@ object CodeExtractorDefaults {
           "ワンタイム(?:パスワード|パスコード|コード)?",
           "使い捨て(?:パスワード|コード)",
           "ログインコード",
+          "验证码",
+          "校验码",
+          "認證",
+          "驗證",
+          "인증번호",
+          "Einmalkennwort",
+          "شناسه\\s+تا[یي][یي]د",
+          "${WORD_START}[sş]ifreniz$WORD_END",
       )
 }
 
@@ -174,8 +201,14 @@ class CodeExtractor // this comment is to separate parts
     val phraseGroup: Int,
     val codeGroup: Int,
     val code: String,
-    val hasStrongContext: Boolean,
+    val score: Int,
   )
+
+  // WICG/WebOTP origin-bound SMS format. It is standards-based and therefore outranks heuristic
+  // text parsing. The code is 4-10 alphanumeric characters and must contain at least one digit.
+  private val originBoundCodeMatcher =
+      """^\s*(@[A-Za-z0-9.-]+)\s+#([A-Za-z0-9]{4,10})(?:\s+@[A-Za-z0-9.-]+)?\s*$"""
+          .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 
   val generalCodeMatcher: Regex =
       """(${sensitivePhrases.joinToString("|")})(?:\s*(?!${
@@ -186,7 +219,7 @@ class CodeExtractor // this comment is to separate parts
         )
       })|[\d\u0660-\u0669\u06F0-\u06F9][^\d\u0660-\u0669\u06F0-\u06F9]))*\s*[:：܃︓﹕]?\s*(["'「]?)${
         ""
-      }([\d\u0660-\u0669\u06F0-\u06F9a-zA-Z\-]{4,}|(?: [\d\u0660-\u0669\u06F0-\u06F9a-zA-Z]){4,}|)\1?(?:[^\d\u0660-\u0669\u06F0-\u06F9a-zA-Z]|${'$'})"""
+      }([\d\u0660-\u0669\u06F0-\u06F9a-zA-Z\-]{4,}|(?: [\d\u0660-\u0669\u06F0-\u06F9a-zA-Z]){4,}|)\2?(?:[^\d\u0660-\u0669\u06F0-\u06F9a-zA-Z]|${'$'})"""
           .toRegex(
               setOf(
                   RegexOption.IGNORE_CASE,
@@ -203,7 +236,7 @@ class CodeExtractor // this comment is to separate parts
           .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 
   val ignoredPhrasesRegex =
-      """\b(${ignoredPhrases.joinToString("|")})\b"""
+      """$WORD_START(${ignoredPhrases.joinToString("|")})$WORD_END"""
           .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 
   val cleanupPhrasesRegex =
@@ -221,6 +254,11 @@ class CodeExtractor // this comment is to separate parts
   // doCleanup is added for convenience in unit testing
   fun getCode(str: String, doCleanup: Boolean = true): String? {
     if (sensitivePhrases.isEmpty()) return null
+
+    // Domain cleanup intentionally removes host names, so standards-based WebOTP extraction must
+    // happen on the original text before the historical cleanup pass.
+    findOriginBoundCandidate(str)?.let { return toEnglishNumbers(it.code) }
+
     val cleanStr =
         if (doCleanup) {
           cleanup(str)
@@ -228,32 +266,46 @@ class CodeExtractor // this comment is to separate parts
           str
         }
 
-    val candidate = findCandidate(cleanStr) ?: return null
+    val candidate = findHeuristicCandidate(cleanStr) ?: return null
     return toEnglishNumbers(candidate.code)
   }
 
   fun getCodeMatch(str: String?): CodeExtractorResult? {
     if (str.isNullOrEmpty() || sensitivePhrases.isEmpty()) return null
-    val candidate = findCandidate(str) ?: return null
+    val candidate = findOriginBoundCandidate(str) ?: findHeuristicCandidate(str) ?: return null
     return CodeExtractorResult(candidate.match, candidate.phraseGroup, candidate.codeGroup)
   }
 
-  private fun findCandidate(str: String): Candidate? {
+  private fun findOriginBoundCandidate(source: String): Candidate? {
+    val match = originBoundCodeMatcher.findAll(source).lastOrNull() ?: return null
+    val code = normalizeCode(match.groups[2]?.value) ?: return null
+    if (code.length !in 4..10 || code.none { it.isDigit() }) return null
+    return Candidate(
+        match = match,
+        phraseGroup = 1,
+        codeGroup = 2,
+        code = code,
+        score = ORIGIN_BOUND_SCORE,
+    )
+  }
+
+  private fun findHeuristicCandidate(str: String): Candidate? {
     val generalCandidates =
         generalCodeMatcher.findAll(str).mapNotNull { match ->
           val code = normalizeCode(match.groups[3]?.value)
           candidateFromMatch(str, match, phraseGroup = 1, codeGroup = 3, code = code)
         }
 
-    // Prefer a strong local authentication phrase over an earlier generic "code" candidate.
-    selectBestCandidate(generalCandidates.toList())?.let { return it }
-
     val specialCandidates =
         specialCodeMatcher.findAll(str).mapNotNull { match ->
           val code = normalizeCode(match.groups[1]?.value)
           candidateFromMatch(str, match, phraseGroup = 2, codeGroup = 1, code = code)
         }
-    return selectBestCandidate(specialCandidates.toList())
+
+    // Mature SMS parsers rank competing candidates rather than accepting the first code-looking
+    // token. This is especially important for notifications that contain both an order/reference
+    // identifier and a real OTP.
+    return selectBestCandidate((generalCandidates + specialCandidates).toList())
   }
 
   private fun candidateFromMatch(
@@ -266,23 +318,41 @@ class CodeExtractor // this comment is to separate parts
     if (code.isNullOrEmpty() || !isPlausibleOtpCode(code)) return null
 
     val context = localLeftContext(source, match)
-    val strong = strongOtpContextRegex.containsMatchIn(context)
-    val nonOtp = nonOtpContextRegex.containsMatchIn(context)
-    if (nonOtp && !strong) return null
+    val strongMatches = strongOtpContextRegex.findAll(context).toList()
+    val hasStrongContext = strongMatches.isNotEmpty()
+    val hasNonOtpContext = nonOtpContextRegex.containsMatchIn(context)
+    if (hasNonOtpContext && !hasStrongContext) return null
+
+    var score = 0
+    if (hasStrongContext) {
+      val lastStrong = strongMatches.last()
+      val distance = (context.length - lastStrong.range.last - 1).coerceAtLeast(0)
+      score += STRONG_CONTEXT_SCORE - distance.coerceAtMost(STRONG_CONTEXT_DISTANCE_CAP)
+    }
+    if (hasNonOtpContext) score -= COMPETING_IDENTIFIER_PENALTY
+
+    score +=
+        when (code.length) {
+          6 -> 30
+          4, 5, 8 -> 20
+          7 -> 10
+          else -> 0
+        }
+    if (code.any { it.isLetter() } && code.any { it.isDigit() }) score += MIXED_CODE_SCORE
 
     return Candidate(
         match = match,
         phraseGroup = phraseGroup,
         codeGroup = codeGroup,
         code = code,
-        hasStrongContext = strong,
+        score = score,
     )
   }
 
   private fun selectBestCandidate(candidates: List<Candidate>): Candidate? =
       candidates
           .sortedWith(
-              compareByDescending<Candidate> { it.hasStrongContext }
+              compareByDescending<Candidate> { it.score }
                   .thenBy { it.match.range.first },
           )
           .firstOrNull()
@@ -300,9 +370,9 @@ class CodeExtractor // this comment is to separate parts
       code?.replace(" ", "")?.replace("-", "")?.takeIf { it.isNotBlank() }
 
   private fun isPlausibleOtpCode(code: String): Boolean {
-    // Most OTPs are 4–10 characters. Keep a little headroom for uncommon providers while
-    // rejecting UUIDs, tracking numbers, hashes and other long identifiers that generic "code"
-    // wording can otherwise pull out of notifications.
+    // WebOTP itself specifies 4-10 alphanumeric characters with at least one number. Heuristic
+    // providers occasionally use 11-12 characters, so retain the fork's small compatibility
+    // headroom while rejecting UUIDs, tracking hashes and other long identifiers.
     return code.length in 4..12 && code.any { it.isLetterOrDigit() }
   }
 
@@ -337,6 +407,11 @@ class CodeExtractor // this comment is to separate parts
   }
 
   private companion object {
-    const val CONTEXT_LOOKBEHIND_CHARS = 48
+    const val CONTEXT_LOOKBEHIND_CHARS = 64
+    const val ORIGIN_BOUND_SCORE = 10_000
+    const val STRONG_CONTEXT_SCORE = 200
+    const val STRONG_CONTEXT_DISTANCE_CAP = 80
+    const val COMPETING_IDENTIFIER_PENALTY = 30
+    const val MIXED_CODE_SCORE = 10
   }
 }
