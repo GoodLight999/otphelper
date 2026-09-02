@@ -4,13 +4,33 @@ set -euo pipefail
 keystore="${OTPHELPER_KEYSTORE_PATH:?OTPHELPER_KEYSTORE_PATH is required}"
 store_password="${OTPHELPER_KEYSTORE_PASSWORD:?OTPHELPER_KEYSTORE_PASSWORD is required}"
 alias_name="${OTPHELPER_KEY_ALIAS:?OTPHELPER_KEY_ALIAS is required}"
-expected="${OTPHELPER_SIGNING_CERT_SHA256:?OTPHELPER_SIGNING_CERT_SHA256 is required}"
+pinned_file="${OTPHELPER_PINNED_SIGNING_CERT_FILE:-.github/signing/otphelper-cert-sha256.txt}"
 
-expected="$(printf '%s' "$expected" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
-if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
-  echo "OTPHELPER_SIGNING_CERT_SHA256 must be a 64-hex certificate digest" >&2
+if [[ ! -s "$pinned_file" ]]; then
+  echo "Pinned signing certificate file is missing or empty: $pinned_file" >&2
   exit 1
 fi
+
+expected="$(cat "$pinned_file" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Pinned signing certificate must be a 64-hex SHA-256 digest: $pinned_file" >&2
+  exit 1
+fi
+
+# Backward-compatible input may still be supplied by old local scripts/workflows, but it can
+# never override the repository pin. This prevents an accidental secret rotation from silently
+# changing the APK update identity.
+declared="${OTPHELPER_SIGNING_CERT_SHA256:-}"
+if [[ -n "$declared" ]]; then
+  declared="$(printf '%s' "$declared" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+  if [[ "$declared" != "$expected" ]]; then
+    echo "Declared signing certificate conflicts with repository-pinned identity" >&2
+    echo "pinned=$expected" >&2
+    echo "declared=$declared" >&2
+    exit 1
+  fi
+fi
+
 if [[ ! -s "$keystore" ]]; then
   echo "Permanent signing keystore is missing or empty: $keystore" >&2
   exit 1
@@ -45,7 +65,7 @@ if [[ ! "$actual" =~ ^[0-9a-f]{64}$ ]]; then
 fi
 if [[ "$actual" != "$expected" ]]; then
   echo "Permanent keystore certificate mismatch" >&2
-  echo "expected=$expected" >&2
+  echo "pinned=$expected" >&2
   echo "actual=$actual" >&2
   exit 1
 fi
