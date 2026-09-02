@@ -49,7 +49,7 @@ object CodeExtractorDefaults {
           "ログインコード",
           "本人確認(?:用)?コード",
           "ワンタイム(?:パス)?コード",
-          "コード", // generic Japanese fallback; guarded by non-OTP context checks below
+          "コード", // generic Japanese fallback; guarded by local non-OTP context checks below
           "パスワード", // generic Japanese fallback; preserves 3-D Secure style messages
           "認証番号", // "authentication number" in japanese
           "ワンタイム", // "one time" in japanese
@@ -111,8 +111,8 @@ object CodeExtractorDefaults {
 
   // Contexts that commonly contain code-like identifiers but are not authentication codes.
   // These are deliberately NOT exposed as global ignore phrases: a real OTP notification can
-  // mention an order/card/account identifier elsewhere in the same message. CodeExtractor only
-  // rejects these contexts when no strong authentication phrase is also present.
+  // mention an order/account identifier elsewhere in the same message. Each extracted candidate
+  // is judged against only its local left-hand context.
   val nonOtpContextPhrases =
       persistentListOf(
           "クーポン(?:コード)?",
@@ -169,6 +169,14 @@ class CodeExtractor // this comment is to separate parts
   private val cleanupPhrases: List<String> = CodeExtractorDefaults.cleanupPhrases,
 ) {
 
+  private data class Candidate(
+    val match: MatchResult,
+    val phraseGroup: Int,
+    val codeGroup: Int,
+    val code: String,
+    val hasStrongContext: Boolean,
+  )
+
   val generalCodeMatcher: Regex =
       """(${sensitivePhrases.joinToString("|")})(?:\s*(?!${
         skipPhrases.joinToString("|")
@@ -220,66 +228,76 @@ class CodeExtractor // this comment is to separate parts
           str
         }
 
-    if (looksLikeNonOtpIdentifier(cleanStr)) return null
-
-    val results = generalCodeMatcher.findAll(cleanStr).filter { it.groups[3]?.value != null }
-    if (results.count() > 0) {
-      // generalCodeMatcher also detects if the text contains "code" keyword
-      // so we only run google's regex only if general regex did not capture the "code" group
-      var foundCode =
-          results
-              .find { it.groups[3]!!.value.isNotEmpty() }
-              ?.groups
-              ?.get(3)
-              ?.value
-              ?.replace(" ", "")
-              ?.replace("-", "")
-
-      if (foundCode.isNullOrEmpty()) {
-        foundCode =
-            specialCodeMatcher
-                .find(cleanStr)
-                ?.groups
-                ?.get(1)
-                ?.value
-                ?.replace(" ", "")
-                ?.replace("-", "")
-      }
-
-      if (!foundCode.isNullOrEmpty() && isPlausibleOtpCode(foundCode)) {
-        return toEnglishNumbers(foundCode)
-      }
-    }
-
-    return null
+    val candidate = findCandidate(cleanStr) ?: return null
+    return toEnglishNumbers(candidate.code)
   }
 
   fun getCodeMatch(str: String?): CodeExtractorResult? {
     if (str.isNullOrEmpty() || sensitivePhrases.isEmpty()) return null
-    if (looksLikeNonOtpIdentifier(str)) return null
-
-    val results = generalCodeMatcher.findAll(str).filter { it.groups[3]?.value != null }
-    if (results.count() > 0) {
-      // generalCodeMatcher also detects if the text contains "code" keyword
-      // so we only run google's regex only if general regex did not capture the "code" group
-      var match = results.find { it.groups[3]!!.value.isNotEmpty() }
-      val foundCode = match?.groups?.get(3)?.value?.replace(" ", "")?.replace("-", "")
-      if (foundCode != null && isPlausibleOtpCode(foundCode)) {
-        return CodeExtractorResult(match!!, 1, 3)
-      }
-      match = specialCodeMatcher.find(str)
-      val specialCode = match?.groups?.get(1)?.value?.replace(" ", "")?.replace("-", "")
-      if (!specialCode.isNullOrBlank() && isPlausibleOtpCode(specialCode)) {
-        return CodeExtractorResult(match!!, 2, 1)
-      }
-    }
-    return null
+    val candidate = findCandidate(str) ?: return null
+    return CodeExtractorResult(candidate.match, candidate.phraseGroup, candidate.codeGroup)
   }
 
-  private fun looksLikeNonOtpIdentifier(str: String): Boolean {
-    if (!nonOtpContextRegex.containsMatchIn(str)) return false
-    return !strongOtpContextRegex.containsMatchIn(str)
+  private fun findCandidate(str: String): Candidate? {
+    val generalCandidates =
+        generalCodeMatcher.findAll(str).mapNotNull { match ->
+          val code = normalizeCode(match.groups[3]?.value)
+          candidateFromMatch(str, match, phraseGroup = 1, codeGroup = 3, code = code)
+        }
+
+    // Prefer a strong local authentication phrase over an earlier generic "code" candidate.
+    selectBestCandidate(generalCandidates.toList())?.let { return it }
+
+    val specialCandidates =
+        specialCodeMatcher.findAll(str).mapNotNull { match ->
+          val code = normalizeCode(match.groups[1]?.value)
+          candidateFromMatch(str, match, phraseGroup = 2, codeGroup = 1, code = code)
+        }
+    return selectBestCandidate(specialCandidates.toList())
   }
+
+  private fun candidateFromMatch(
+    source: String,
+    match: MatchResult,
+    phraseGroup: Int,
+    codeGroup: Int,
+    code: String?,
+  ): Candidate? {
+    if (code.isNullOrEmpty() || !isPlausibleOtpCode(code)) return null
+
+    val context = localLeftContext(source, match)
+    val strong = strongOtpContextRegex.containsMatchIn(context)
+    val nonOtp = nonOtpContextRegex.containsMatchIn(context)
+    if (nonOtp && !strong) return null
+
+    return Candidate(
+        match = match,
+        phraseGroup = phraseGroup,
+        codeGroup = codeGroup,
+        code = code,
+        hasStrongContext = strong,
+    )
+  }
+
+  private fun selectBestCandidate(candidates: List<Candidate>): Candidate? =
+      candidates
+          .sortedWith(
+              compareByDescending<Candidate> { it.hasStrongContext }
+                  .thenBy { it.match.range.first },
+          )
+          .firstOrNull()
+
+  private fun localLeftContext(source: String, match: MatchResult): String {
+    // Generic words such as "code" often begin after their qualifier ("order code",
+    // "login code"). Looking only to the left prevents a later real OTP phrase from blessing an
+    // earlier order/tracking identifier in the same notification.
+    val start = (match.range.first - CONTEXT_LOOKBEHIND_CHARS).coerceAtLeast(0)
+    val endExclusive = (match.range.last + 1).coerceAtMost(source.length)
+    return source.substring(start, endExclusive)
+  }
+
+  private fun normalizeCode(code: String?): String? =
+      code?.replace(" ", "")?.replace("-", "")?.takeIf { it.isNotBlank() }
 
   private fun isPlausibleOtpCode(code: String): Boolean {
     // Most OTPs are 4–10 characters. Keep a little headroom for uncommon providers while
@@ -316,5 +334,9 @@ class CodeExtractor // this comment is to separate parts
   fun cleanup(str: String): String {
     if (cleanupPhrases.isEmpty()) return str
     return str.replace(cleanupPhrasesRegex, "")
+  }
+
+  private companion object {
+    const val CONTEXT_LOOKBEHIND_CHARS = 48
   }
 }
