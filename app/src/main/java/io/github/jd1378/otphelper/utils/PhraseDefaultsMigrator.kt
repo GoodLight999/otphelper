@@ -12,7 +12,7 @@ import io.github.jd1378.otphelper.UserSettings
 object PhraseDefaultsMigrator {
   const val CURRENT_VERSION = 1
 
-  private val legacySensitiveV1205 =
+  internal val legacySensitiveV1205 =
       listOf(
           "code",
           "One[-\\s]Time[-\\s]Password",
@@ -57,7 +57,7 @@ object PhraseDefaultsMigrator {
   // Upstream 1.20.6 fixed Unicode boundaries and added Persian confirmation-ID wording. Supporting
   // this exact snapshot makes the fork migration robust even for users who imported upstream
   // defaults before installing the fork.
-  private val legacySensitiveV1206 =
+  internal val legacySensitiveV1206 =
       listOf(
           "code",
           "One[-\\s]Time[-\\s]Password",
@@ -77,7 +77,7 @@ object PhraseDefaultsMigrator {
           "認證",
           "驗證",
           "код",
-          "סיסم",
+          "סיסמ",
           "(?<![\\p{L}\\p{N}_])הקוד(?![\\p{L}\\p{N}_])",
           "(?<![\\p{L}\\p{N}_])קוד(?![\\p{L}\\p{N}_])",
           "\\bKodu\\W",
@@ -100,7 +100,7 @@ object PhraseDefaultsMigrator {
           "인증번호",
       )
 
-  private val legacyIgnoredV1205 =
+  internal val legacyIgnoredV1205 =
       listOf(
           "تخفیف",
           "takhfif",
@@ -118,7 +118,7 @@ object PhraseDefaultsMigrator {
           "codex",
       )
 
-  private val legacyIgnoredV1206 =
+  internal val legacyIgnoredV1206 =
       listOf(
           "تخفیف",
           "تخفیفات",
@@ -138,7 +138,7 @@ object PhraseDefaultsMigrator {
           "codex",
       )
 
-  private val legacyCleanup =
+  internal val legacyCleanup =
       listOf(
           "[a-zA-Z0-9][a-zA-Z0-9-]{0,61}\\.[a-zA-Z]{2,}(?:[.a-zA-Z]{0,3}(?=\\s+)|)",
           "['\"]",
