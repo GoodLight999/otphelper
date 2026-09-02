@@ -30,6 +30,7 @@ object CodeExtractorDefaults {
           "\\bOTP\\W",
           "\\b2FA\\W",
           "Einmalkennwort",
+          "Best[aä]tigungscode",
           "contraseña",
           "c[oó]digo",
           "clave",
@@ -121,9 +122,8 @@ object CodeExtractorDefaults {
       )
 
   // Contexts that commonly contain code-like identifiers but are not authentication codes.
-  // This follows the same principle used by mature SMS rule engines: competing identifiers are
-  // classified locally instead of globally blacklisting the whole message, because a real OTP can
-  // coexist with an order/reference/account number in the same notification.
+  // Competing identifiers are classified locally instead of globally blacklisting the message,
+  // because a real OTP can coexist with an order/reference/account number in one notification.
   val nonOtpContextPhrases =
       persistentListOf(
           "クーポン(?:コード)?",
@@ -171,6 +171,7 @@ object CodeExtractorDefaults {
           "\\bconfirmation\\s+code\\b",
           "\\blogin\\s+code\\b",
           "\\bpasscode\\b",
+          "Best[aä]tigungscode",
           "認証(?:番号|(?:用)?コード)",
           "確認コード",
           "検証コード",
@@ -303,8 +304,8 @@ class CodeExtractor // this comment is to separate parts
         }
 
     // Mature SMS parsers rank competing candidates rather than accepting the first code-looking
-    // token. This is especially important for notifications that contain both an order/reference
-    // identifier and a real OTP.
+    // token. Phrase/code proximity is the primary heuristic: an account/order number merely near a
+    // later verification phrase must not outrank the code immediately attached to that phrase.
     return selectBestCandidate((generalCandidates + specialCandidates).toList())
   }
 
@@ -317,27 +318,33 @@ class CodeExtractor // this comment is to separate parts
   ): Candidate? {
     if (code.isNullOrEmpty() || !isPlausibleOtpCode(code)) return null
 
-    val context = localLeftContext(source, match)
-    val strongMatches = strongOtpContextRegex.findAll(context).toList()
-    val hasStrongContext = strongMatches.isNotEmpty()
-    val hasNonOtpContext = nonOtpContextRegex.containsMatchIn(context)
-    if (hasNonOtpContext && !hasStrongContext) return null
+    val phraseRange = match.groups[phraseGroup]?.range ?: return null
+    val codeRange = match.groups[codeGroup]?.range ?: return null
+    val strongDistance = nearestContextDistance(source, codeRange, strongOtpContextRegex)
+    val nonOtpDistance = nearestContextDistance(source, codeRange, nonOtpContextRegex)
+    if (nonOtpDistance != null && strongDistance == null) return null
 
-    var score = 0
-    if (hasStrongContext) {
-      val lastStrong = strongMatches.last()
-      val distance = (context.length - lastStrong.range.last - 1).coerceAtLeast(0)
-      score += STRONG_CONTEXT_SCORE - distance.coerceAtMost(STRONG_CONTEXT_DISTANCE_CAP)
+    var score = PHRASE_PROXIMITY_SCORE - rangeDistance(phraseRange, codeRange).coerceAtMost(PHRASE_PROXIMITY_CAP)
+
+    if (strongDistance != null) {
+      score += STRONG_CONTEXT_SCORE - strongDistance.coerceAtMost(STRONG_CONTEXT_DISTANCE_CAP)
     }
-    if (hasNonOtpContext) score -= COMPETING_IDENTIFIER_PENALTY
 
+    if (nonOtpDistance != null) {
+      val closeness =
+          NON_OTP_CONTEXT_DISTANCE_CAP - nonOtpDistance.coerceAtMost(NON_OTP_CONTEXT_DISTANCE_CAP)
+      score -= COMPETING_IDENTIFIER_PENALTY + closeness / 2
+    }
+
+    // Length is only a weak tiebreaker. Previous code over-weighted six digits and could select an
+    // unrelated six-digit order/reference number over a nearby legitimate 7-10 digit OTP.
     score +=
         when (code.length) {
-          6 -> 30
-          4, 5, 8 -> 20
-          7 -> 10
+          6 -> 8
+          4, 5, 7, 8 -> 4
           else -> 0
         }
+    if (code.any { it.isDigit() }) score += DIGIT_PRESENT_SCORE
     if (code.any { it.isLetter() } && code.any { it.isDigit() }) score += MIXED_CODE_SCORE
 
     return Candidate(
@@ -357,14 +364,25 @@ class CodeExtractor // this comment is to separate parts
           )
           .firstOrNull()
 
-  private fun localLeftContext(source: String, match: MatchResult): String {
-    // Generic words such as "code" often begin after their qualifier ("order code",
-    // "login code"). Looking only to the left prevents a later real OTP phrase from blessing an
-    // earlier order/tracking identifier in the same notification.
-    val start = (match.range.first - CONTEXT_LOOKBEHIND_CHARS).coerceAtLeast(0)
-    val endExclusive = (match.range.last + 1).coerceAtMost(source.length)
-    return source.substring(start, endExclusive)
+  private fun nearestContextDistance(source: String, codeRange: IntRange, regex: Regex): Int? {
+    val start = (codeRange.first - CONTEXT_RADIUS_CHARS).coerceAtLeast(0)
+    val endExclusive = (codeRange.last + 1 + CONTEXT_RADIUS_CHARS).coerceAtMost(source.length)
+    val context = source.substring(start, endExclusive)
+
+    return regex.findAll(context)
+        .map { match ->
+          val globalRange = (match.range.first + start)..(match.range.last + start)
+          rangeDistance(codeRange, globalRange)
+        }
+        .minOrNull()
   }
+
+  private fun rangeDistance(first: IntRange, second: IntRange): Int =
+      when {
+        first.last < second.first -> second.first - first.last - 1
+        second.last < first.first -> first.first - second.last - 1
+        else -> 0
+      }
 
   private fun normalizeCode(code: String?): String? =
       code?.replace(" ", "")?.replace("-", "")?.takeIf { it.isNotBlank() }
@@ -407,11 +425,15 @@ class CodeExtractor // this comment is to separate parts
   }
 
   private companion object {
-    const val CONTEXT_LOOKBEHIND_CHARS = 64
+    const val CONTEXT_RADIUS_CHARS = 64
     const val ORIGIN_BOUND_SCORE = 10_000
+    const val PHRASE_PROXIMITY_SCORE = 160
+    const val PHRASE_PROXIMITY_CAP = 120
     const val STRONG_CONTEXT_SCORE = 200
-    const val STRONG_CONTEXT_DISTANCE_CAP = 80
+    const val STRONG_CONTEXT_DISTANCE_CAP = 100
+    const val NON_OTP_CONTEXT_DISTANCE_CAP = 100
     const val COMPETING_IDENTIFIER_PENALTY = 30
-    const val MIXED_CODE_SCORE = 10
+    const val DIGIT_PRESENT_SCORE = 10
+    const val MIXED_CODE_SCORE = 6
   }
 }
