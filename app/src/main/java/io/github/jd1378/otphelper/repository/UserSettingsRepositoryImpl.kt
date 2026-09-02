@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.datastore.core.DataStore
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.UserSettings
+import io.github.jd1378.otphelper.utils.PhraseDefaultsMigrator
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -117,6 +118,10 @@ constructor(
           .addAllCleanupPhrases(cleanup)
           .build()
     }
+  }
+
+  override suspend fun migratePhraseDefaultsIfNeeded() {
+    userSettingsStore.updateData(PhraseDefaultsMigrator::migrate)
   }
 
   override suspend fun setVersion(version: Int) {
