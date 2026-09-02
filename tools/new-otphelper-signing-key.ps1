@@ -93,6 +93,26 @@ Review docs/SIGNING_MIGRATION.md, choose two independent backup locations, then 
 "@
 }
 
+# Once a public certificate pin exists, this repository already has a permanent Android update
+# identity. Generating a second private key is almost always destructive because Android treats it
+# as a different application signer. The bootstrap contract test is the sole automated bypass and
+# deliberately uses an isolated throwaway directory.
+$repositoryPinPath = Join-Path $PSScriptRoot '..' '.github' 'signing' 'otphelper-cert-sha256.txt'
+$bootstrapContractTest = $env:OTPHELPER_SIGNING_BOOTSTRAP_TEST -ceq '1'
+if ((Test-Path -LiteralPath $repositoryPinPath -PathType Leaf) -and -not $bootstrapContractTest) {
+    $existingPin = (Get-Content -LiteralPath $repositoryPinPath -Raw).Trim()
+    if ($existingPin -match '^[0-9A-Fa-f]{64}$') {
+        throw @"
+A permanent signing identity is already pinned for this repository:
+$($existingPin.ToLowerInvariant())
+
+Refusing to generate a replacement private key. Use the existing GitHub Actions signing Secrets
+or restore the operator backup for that certificate. Deliberate signer rotation requires a separate
+migration procedure and must not be performed with this bootstrap command.
+"@
+    }
+}
+
 $keytool = Assert-Command 'keytool'
 $gh = $null
 if ($ConfigureGitHubSecrets) {
@@ -233,7 +253,7 @@ try {
 
     $manifest = [ordered]@{
         schema = 'otphelper.signing-bootstrap'
-        version = 1
+        version = 2
         createdAt = [DateTimeOffset]::Now.ToString('o')
         repository = $Repository
         alias = $Alias
@@ -256,10 +276,12 @@ OTPHELPER_SIGNING_KEYSTORE_B64       <- contents of otphelper-signing-keystore-b
 OTPHELPER_KEYSTORE_PASSWORD          <- the password entered during generation
 OTPHELPER_KEY_ALIAS                  <- $Alias
 OTPHELPER_KEY_PASSWORD               <- the same password entered during generation
-OTPHELPER_SIGNING_CERT_SHA256        <- $fingerprint
 
-Do not commit, email, or upload this directory as an ordinary attachment.
-Create at least two independent encrypted backups before deleting any copy.
+The expected certificate identity is NOT a Secret. It is pinned publicly in:
+.github/signing/otphelper-cert-sha256.txt
+
+Do not commit, email, or upload this directory as an ordinary public attachment.
+Create at least two independent private backups before deleting any copy.
 The certificate and fingerprint may be shared; the JKS and password must remain private.
 See docs/SIGNING_MIGRATION.md before replacing the currently installed APK.
 "@
@@ -280,7 +302,6 @@ See docs/SIGNING_MIGRATION.md before replacing the currently installed APK.
         Set-GitHubSecretFromText $gh 'OTPHELPER_KEYSTORE_PASSWORD' $password $Repository
         Set-GitHubSecretFromText $gh 'OTPHELPER_KEY_ALIAS' $Alias $Repository
         Set-GitHubSecretFromText $gh 'OTPHELPER_KEY_PASSWORD' $password $Repository
-        Set-GitHubSecretFromText $gh 'OTPHELPER_SIGNING_CERT_SHA256' $fingerprint $Repository
     }
 
     Write-Host "Permanent signing material created: $outputPath"
