@@ -40,6 +40,8 @@ interface UserSettingsRepository {
       cleanup: List<String>,
   )
 
+  suspend fun migratePhraseDefaultsIfNeeded()
+
   suspend fun setVersion(version: Int)
 
   suspend fun setIsAutoDismissEnabled(value: Boolean)
