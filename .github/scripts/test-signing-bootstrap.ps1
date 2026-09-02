@@ -13,9 +13,10 @@ $output = Join-Path $env:RUNNER_TEMP 'otphelper-signing-smoke'
 $fakeGhDirectory = Join-Path $env:RUNNER_TEMP 'otphelper-fake-gh-bin'
 $captureDirectory = Join-Path $env:RUNNER_TEMP 'otphelper-fake-gh-capture'
 $decoded = Join-Path $env:RUNNER_TEMP 'otphelper-signing-smoke-decoded.jks'
+$temporaryPin = Join-Path $env:RUNNER_TEMP 'otphelper-signing-smoke-pin.txt'
 
 Remove-Item -LiteralPath $output, $fakeGhDirectory, $captureDirectory -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $decoded -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $decoded, $temporaryPin -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $fakeGhDirectory, $captureDirectory -Force | Out-Null
 
 $fakeGh = Join-Path $fakeGhDirectory 'gh'
@@ -56,6 +57,7 @@ $originalPath = $env:PATH
 $env:PATH = "$fakeGhDirectory$([System.IO.Path]::PathSeparator)$originalPath"
 $env:OTPHELPER_TEST_SIGNING_PASSWORD = $testPassword
 $env:OTPHELPER_FAKE_GH_CAPTURE = $captureDirectory
+$env:OTPHELPER_SIGNING_BOOTSTRAP_TEST = '1'
 try {
     ./tools/new-otphelper-signing-key.ps1 `
         -OutputDirectory $output `
@@ -69,11 +71,12 @@ finally {
     $env:PATH = $originalPath
     Remove-Item Env:OTPHELPER_TEST_SIGNING_PASSWORD -ErrorAction SilentlyContinue
     Remove-Item Env:OTPHELPER_FAKE_GH_CAPTURE -ErrorAction SilentlyContinue
+    Remove-Item Env:OTPHELPER_SIGNING_BOOTSTRAP_TEST -ErrorAction SilentlyContinue
 }
 
 $manifest = Get-Content -LiteralPath (Join-Path $output 'manifest.json') -Raw |
     ConvertFrom-Json
-if ($manifest.schema -ne 'otphelper.signing-bootstrap' -or $manifest.version -ne 1) {
+if ($manifest.schema -ne 'otphelper.signing-bootstrap' -or $manifest.version -ne 2) {
     throw 'Signing bootstrap emitted invalid manifest metadata.'
 }
 if ($manifest.alias -ne 'otphelper') {
@@ -116,10 +119,17 @@ finally {
     Remove-Item Env:OTPHELPER_KEYTOOL_PASSWORD -ErrorAction SilentlyContinue
 }
 
+# The production verifier must always compare against a pin. This smoke test generates an isolated
+# throwaway JKS, so provide an isolated throwaway pin rather than weakening production verification.
+[System.IO.File]::WriteAllText(
+    $temporaryPin,
+    $fingerprint,
+    [System.Text.UTF8Encoding]::new($false)
+)
 $env:OTPHELPER_KEYSTORE_PATH = $keystore
 $env:OTPHELPER_KEYSTORE_PASSWORD = $testPassword
 $env:OTPHELPER_KEY_ALIAS = 'otphelper'
-$env:OTPHELPER_SIGNING_CERT_SHA256 = $fingerprint
+$env:OTPHELPER_PINNED_SIGNING_CERT_FILE = $temporaryPin
 try {
     & bash ./.github/scripts/verify-signing-keystore.sh
     if ($LASTEXITCODE -ne 0) {
@@ -130,7 +140,7 @@ finally {
     Remove-Item Env:OTPHELPER_KEYSTORE_PATH -ErrorAction SilentlyContinue
     Remove-Item Env:OTPHELPER_KEYSTORE_PASSWORD -ErrorAction SilentlyContinue
     Remove-Item Env:OTPHELPER_KEY_ALIAS -ErrorAction SilentlyContinue
-    Remove-Item Env:OTPHELPER_SIGNING_CERT_SHA256 -ErrorAction SilentlyContinue
+    Remove-Item Env:OTPHELPER_PINNED_SIGNING_CERT_FILE -ErrorAction SilentlyContinue
 }
 
 $expectedSecrets = [ordered]@{
@@ -138,7 +148,6 @@ $expectedSecrets = [ordered]@{
     OTPHELPER_KEYSTORE_PASSWORD = $testPassword
     OTPHELPER_KEY_ALIAS = 'otphelper'
     OTPHELPER_KEY_PASSWORD = $testPassword
-    OTPHELPER_SIGNING_CERT_SHA256 = $fingerprint
 }
 foreach ($entry in $expectedSecrets.GetEnumerator()) {
     $valuePath = Join-Path $captureDirectory "$($entry.Key).value"
@@ -159,4 +168,9 @@ foreach ($entry in $expectedSecrets.GetEnumerator()) {
     }
 }
 
-Write-Host 'Signing bootstrap verified: JKS, certificate, pre-build keystore check, Base64, and exact no-newline Secret transport.'
+$unexpectedLegacySecret = Join-Path $captureDirectory 'OTPHELPER_SIGNING_CERT_SHA256.value'
+if (Test-Path -LiteralPath $unexpectedLegacySecret -PathType Leaf) {
+    throw 'Certificate identity must be repository-pinned, not transported as a mutable Secret.'
+}
+
+Write-Host 'Signing bootstrap verified: JKS, certificate, repository-pin verifier, Base64, and exact four-Secret transport.'
