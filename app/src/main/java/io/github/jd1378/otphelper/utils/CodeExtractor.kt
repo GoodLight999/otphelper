@@ -42,8 +42,15 @@ object CodeExtractorDefaults {
           "\\bKods\\W",
           "\\b(?:m|sms)?TAN\\W",
           "\\bcodice\\W", // "code" in italian
-          "コード", // "code" in japanese
-          "パスワード", // "password" in japanese
+          "認証(?:用)?コード", // strong Japanese authentication context
+          "確認コード",
+          "検証コード",
+          "セキュリティコード",
+          "ログインコード",
+          "本人確認(?:用)?コード",
+          "ワンタイム(?:パス)?コード",
+          "コード", // generic Japanese fallback; guarded by non-OTP context checks below
+          "パスワード", // generic Japanese fallback; preserves 3-D Secure style messages
           "認証番号", // "authentication number" in japanese
           "ワンタイム", // "one time" in japanese
           "\\bvahvistuskoodi", // "confirmation code" in finnish
@@ -101,6 +108,58 @@ object CodeExtractorDefaults {
           "<#>",
           "share OTP",
       )
+
+  // Contexts that commonly contain code-like identifiers but are not authentication codes.
+  // These are deliberately NOT exposed as global ignore phrases: a real OTP notification can
+  // mention an order/card/account identifier elsewhere in the same message. CodeExtractor only
+  // rejects these contexts when no strong authentication phrase is also present.
+  val nonOtpContextPhrases =
+      persistentListOf(
+          "クーポン(?:コード)?",
+          "プロモ(?:ーション)?コード",
+          "招待コード",
+          "紹介コード",
+          "商品コード",
+          "製品コード",
+          "品番",
+          "型番",
+          "注文(?:番号|コード|ID)",
+          "受注番号",
+          "予約(?:番号|コード|ID)",
+          "受付番号",
+          "お問い合わせ番号",
+          "問合せ番号",
+          "追跡(?:番号|コード|ID)",
+          "配送(?:番号|コード|ID)",
+          "伝票番号",
+          "チケット(?:番号|コード|ID)",
+          "会員番号",
+          "顧客番号",
+          "シリアル(?:番号|コード)",
+          "バージョン(?:番号|コード)?",
+          "ビルド(?:番号|コード)?",
+          "郵便番号",
+          "\\b(?:coupon|promo|promotion|discount|referral|invite|product|order|tracking|shipment|booking|reservation|ticket|serial|version|build|postal|zip)\\s*(?:code|id|number)\\b",
+      )
+
+  val strongOtpContextPhrases =
+      persistentListOf(
+          "\\bOTP\\b",
+          "\\b2FA\\b",
+          "One[-\\s]?Time(?:[-\\s](?:Password|Passcode|Code))?",
+          "\\bverification\\s+code\\b",
+          "\\bauthentication\\s+code\\b",
+          "\\bsecurity\\s+code\\b",
+          "\\bconfirmation\\s+code\\b",
+          "\\blogin\\s+code\\b",
+          "認証(?:番号|(?:用)?コード)",
+          "確認コード",
+          "検証コード",
+          "本人確認(?:用)?コード",
+          "ワンタイム(?:パスワード|パスコード|コード)?",
+          "使い捨て(?:パスワード|コード)",
+          "ログインコード",
+      )
 }
 
 class CodeExtractor // this comment is to separate parts
@@ -143,6 +202,14 @@ class CodeExtractor // this comment is to separate parts
       """(${cleanupPhrases.joinToString("|")})"""
           .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 
+  private val nonOtpContextRegex =
+      """(${CodeExtractorDefaults.nonOtpContextPhrases.joinToString("|")})"""
+          .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+
+  private val strongOtpContextRegex =
+      """(${CodeExtractorDefaults.strongOtpContextPhrases.joinToString("|")})"""
+          .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+
   // doCleanup is added for convenience in unit testing
   fun getCode(str: String, doCleanup: Boolean = true): String? {
     if (sensitivePhrases.isEmpty()) return null
@@ -152,6 +219,9 @@ class CodeExtractor // this comment is to separate parts
         } else {
           str
         }
+
+    if (looksLikeNonOtpIdentifier(cleanStr)) return null
+
     val results = generalCodeMatcher.findAll(cleanStr).filter { it.groups[3]?.value != null }
     if (results.count() > 0) {
       // generalCodeMatcher also detects if the text contains "code" keyword
@@ -176,7 +246,7 @@ class CodeExtractor // this comment is to separate parts
                 ?.replace("-", "")
       }
 
-      if (!foundCode.isNullOrEmpty()) {
+      if (!foundCode.isNullOrEmpty() && isPlausibleOtpCode(foundCode)) {
         return toEnglishNumbers(foundCode)
       }
     }
@@ -186,6 +256,7 @@ class CodeExtractor // this comment is to separate parts
 
   fun getCodeMatch(str: String?): CodeExtractorResult? {
     if (str.isNullOrEmpty() || sensitivePhrases.isEmpty()) return null
+    if (looksLikeNonOtpIdentifier(str)) return null
 
     val results = generalCodeMatcher.findAll(str).filter { it.groups[3]?.value != null }
     if (results.count() > 0) {
@@ -193,15 +264,28 @@ class CodeExtractor // this comment is to separate parts
       // so we only run google's regex only if general regex did not capture the "code" group
       var match = results.find { it.groups[3]!!.value.isNotEmpty() }
       val foundCode = match?.groups?.get(3)?.value?.replace(" ", "")?.replace("-", "")
-      if (foundCode !== null) {
+      if (foundCode != null && isPlausibleOtpCode(foundCode)) {
         return CodeExtractorResult(match!!, 1, 3)
       }
       match = specialCodeMatcher.find(str)
-      if (match?.groups?.get(1)?.value?.replace(" ", "")?.replace("-", "")?.isNotBlank() == true) {
-        return CodeExtractorResult(match, 2, 1)
+      val specialCode = match?.groups?.get(1)?.value?.replace(" ", "")?.replace("-", "")
+      if (!specialCode.isNullOrBlank() && isPlausibleOtpCode(specialCode)) {
+        return CodeExtractorResult(match!!, 2, 1)
       }
     }
     return null
+  }
+
+  private fun looksLikeNonOtpIdentifier(str: String): Boolean {
+    if (!nonOtpContextRegex.containsMatchIn(str)) return false
+    return !strongOtpContextRegex.containsMatchIn(str)
+  }
+
+  private fun isPlausibleOtpCode(code: String): Boolean {
+    // Most OTPs are 4–10 characters. Keep a little headroom for uncommon providers while
+    // rejecting UUIDs, tracking numbers, hashes and other long identifiers that generic "code"
+    // wording can otherwise pull out of notifications.
+    return code.length in 4..12 && code.any { it.isLetterOrDigit() }
   }
 
   private fun toEnglishNumbers(number: String?): String? {
