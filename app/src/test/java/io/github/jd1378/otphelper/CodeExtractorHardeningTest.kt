@@ -2,7 +2,9 @@ package io.github.jd1378.otphelper
 
 import io.github.jd1378.otphelper.utils.CodeExtractor
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodeExtractorHardeningTest {
@@ -44,6 +46,28 @@ class CodeExtractorHardeningTest {
     assertNull(extractor.getCode("Your order code is 4520."))
     assertNull(extractor.getCode("Tracking code: 883104."))
     assertNull(extractor.getCode("Coupon code 1234 expires tonight."))
+    assertNull(extractor.getCode("Source code: 9911"))
+    assertNull(extractor.getCode("Status code: 5030"))
+  }
+
+  @Test
+  fun competingTechnicalCodeDoesNotHideLaterOtp() {
+    val message = "Error code 5000. Your login code is 789012."
+    assertEquals("789012", extractor.getCode(message))
+  }
+
+  @Test
+  fun strongestEnglishContextsCoverMfaAndAccessCodes() {
+    assertEquals("654321", extractor.getCode("Your MFA code is 654321."))
+    assertEquals("A7C9P2", extractor.getCode("Access code: A7C9P2"))
+    assertEquals("887766", extractor.getCode("Temporary passcode: 887766"))
+  }
+
+  @Test
+  fun strongestJapaneseContextsCoverAdditionalAuthentication() {
+    assertEquals("112233", extractor.getCode("追加認証コードは 112233 です。"))
+    assertEquals("445566", extractor.getCode("次の認証番号 445566 を入力してください。"))
+    assertEquals("778899", extractor.getCode("お客様の認証コード: 778899"))
   }
 
   @Test
@@ -56,6 +80,12 @@ class CodeExtractorHardeningTest {
     assertNull(extractor.getCode("versionCode 1234"))
     assertNull(extractor.getCode("barcode 123456"))
     assertNull(extractor.getCode("unicode 987654"))
+  }
+
+  @Test
+  fun rawOffWordNoLongerGloballySuppressesRealOtpNotifications() {
+    assertFalse(extractor.shouldIgnore("Turn off VPN. Your verification code is 123456."))
+    assertTrue(extractor.shouldIgnore("Save 20% off today"))
   }
 
   @Test
