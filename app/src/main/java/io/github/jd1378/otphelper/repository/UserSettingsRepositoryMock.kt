@@ -17,6 +17,11 @@ class UserSettingsRepositoryMock : UserSettingsRepository {
     TODO("Not yet implemented")
   }
 
+  override suspend fun migratePhraseDefaultsIfNeeded() {
+    // The mock has no persistent backing store. Production migration behavior is covered by the
+    // repository implementation tests; callers only require the contract to be available here.
+  }
+
   override suspend fun setIsMigrationDone(value: Boolean) {
     TODO("Not yet implemented")
   }
