@@ -33,6 +33,28 @@ class NotificationCodeSelectorTest {
   }
 
   @Test
+  fun splitBodyFallbackExcludesNumericConversationTitle() {
+    val completeNotification =
+        """
+        244080
+        923030
+        Amazonのワンタイムパスワードです。
+        誰とも共有しないでください。
+        """.trimIndent()
+    val bodyOnly =
+        """
+        923030
+        Amazonのワンタイムパスワードです。
+        誰とも共有しないでください。
+        """.trimIndent()
+
+    assertEquals(
+        "923030",
+        NotificationCodeSelector.selectCode(completeNotification, extractor, bodyOnly),
+    )
+  }
+
+  @Test
   fun codeAndPhraseOnSeparateLinesStillUseWholeTextFallback() {
     val notificationText =
         """
