@@ -11,14 +11,22 @@ package io.github.jd1378.otphelper.utils
  * password".
  *
  * The precision rule is deliberately structural rather than provider-specific:
- * 1. evaluate every non-empty line independently first;
+ * 1. evaluate every non-empty line from the complete visible notification independently first;
  * 2. a line can only produce a code from authentication context on that same line;
  * 3. ignored/exclusion phrases are evaluated locally for that line;
- * 4. only when no line-local result exists, fall back to the historical whole-text parser so
- *    legitimate messages that put the code and authentication phrase on different lines still work.
+ * 4. only when no line-local result exists, allow cross-line parsing inside [crossLineText];
+ * 5. notification callers pass body-only text as [crossLineText], so a title/sender identifier can
+ *    never borrow an authentication phrase from a later body line.
+ *
+ * [crossLineText] defaults to [rawText] for non-structured callers and tests. Android notification
+ * ingestion should pass the body-only representation whenever a Notification object is available.
  */
 object NotificationCodeSelector {
-  fun selectCode(rawText: String, extractor: CodeExtractor): String? {
+  fun selectCode(
+      rawText: String,
+      extractor: CodeExtractor,
+      crossLineText: String = rawText,
+  ): String? {
     if (rawText.isBlank()) return null
 
     val lines =
@@ -35,11 +43,11 @@ object NotificationCodeSelector {
       extractor.getCode(cleanedLine, false)?.takeIf { it.isNotBlank() }?.let { return it }
     }
 
-    // Keep compatibility with providers that split e.g. "123456" and "Your verification code"
-    // across separate notification lines. Whole-text parsing is intentionally only the fallback.
-    if (extractor.shouldIgnore(rawText)) return null
-    val cleanedText = extractor.cleanup(rawText)
-    if (cleanedText.isBlank()) return null
-    return extractor.getCode(cleanedText, false)?.takeIf { it.isNotBlank() }
+    // Preserve providers that split the code and phrase across body lines, but never restore title
+    // or sender metadata to this fallback when the caller can distinguish notification fields.
+    if (crossLineText.isBlank() || extractor.shouldIgnore(crossLineText)) return null
+    val cleanedCrossLineText = extractor.cleanup(crossLineText)
+    if (cleanedCrossLineText.isBlank()) return null
+    return extractor.getCode(cleanedCrossLineText, false)?.takeIf { it.isNotBlank() }
   }
 }
