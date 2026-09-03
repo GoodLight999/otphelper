@@ -23,6 +23,7 @@ import io.github.jd1378.otphelper.di.RecentDetectedCodesHolder
 import io.github.jd1378.otphelper.di.RecentDetectedMessageHolder
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
+import io.github.jd1378.otphelper.utils.NotificationCodeSelector
 import io.github.jd1378.otphelper.worker.CodeDetectedWorker
 import javax.inject.Inject
 
@@ -168,38 +169,32 @@ class NotificationListener : NotificationListenerService() {
     var codeDetected = false
     if (listenerSettings.modeOfOperation == ModeOfOperation.Notification) {
       val codeExtractor = listenerSettings.codeExtractor ?: return
-      if (codeExtractor.shouldIgnore(rawNotificationText)) {
-        AppLogger.d(TAG, "notification ignored by ignore phrases, pkg=${sbn.packageName}")
-        return
-      }
       val notificationText = codeExtractor.cleanup(rawNotificationText)
-      if (notificationText.isNotEmpty()) {
-        val code = codeExtractor.getCode(notificationText, false)
-        if (code.isNullOrEmpty()) {
-          AppLogger.d(TAG, "no code found in notification, pkg=${sbn.packageName}")
+      val code = NotificationCodeSelector.selectCode(rawNotificationText, codeExtractor)
+      if (code.isNullOrEmpty()) {
+        AppLogger.d(TAG, "no code found in notification, pkg=${sbn.packageName}")
+      } else {
+        codeDetected = true
+        val signature = RecentDetectedCodesHolder.signature(sbn.packageName, code)
+        if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) {
+          AppLogger.d(TAG, "code detected but duplicate, skipping enqueue, pkg=${sbn.packageName}")
         } else {
-          codeDetected = true
-          val signature = RecentDetectedCodesHolder.signature(sbn.packageName, code)
-          if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) {
-            AppLogger.d(TAG, "code detected but duplicate, skipping enqueue, pkg=${sbn.packageName}")
-          } else {
-            AppLogger.i(TAG, "code detected in notification, enqueueing worker, pkg=${sbn.packageName}")
-            val data: Data =
-                try {
-                  workDataOf(
-                      "packageName" to sbn.packageName,
-                      "notificationId" to sbn.id.toString(),
-                      "notificationTag" to sbn.tag,
-                      "text" to notificationText,
-                      "code" to code,
-                  )
-                } catch (error: Throwable) {
-                  AppLogger.e(TAG, "Notification too large to enqueue", error)
-                  return
-                }
-            WorkManager.getInstance(applicationContext)
-                .enqueue(OneTimeWorkRequestBuilder<CodeDetectedWorker>().setInputData(data).build())
-          }
+          AppLogger.i(TAG, "code detected in notification, enqueueing worker, pkg=${sbn.packageName}")
+          val data: Data =
+              try {
+                workDataOf(
+                    "packageName" to sbn.packageName,
+                    "notificationId" to sbn.id.toString(),
+                    "notificationTag" to sbn.tag,
+                    "text" to notificationText,
+                    "code" to code,
+                )
+              } catch (error: Throwable) {
+                AppLogger.e(TAG, "Notification too large to enqueue", error)
+                return
+              }
+          WorkManager.getInstance(applicationContext)
+              .enqueue(OneTimeWorkRequestBuilder<CodeDetectedWorker>().setInputData(data).build())
         }
       }
     } else {
