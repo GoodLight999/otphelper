@@ -74,6 +74,20 @@ class NotificationListener : NotificationListenerService() {
             Notification.EXTRA_SUMMARY_TEXT,
             Notification.EXTRA_BIG_TEXT,
         )
+
+    // Cross-line OTP inference deliberately excludes title fields. Messaging apps commonly place a
+    // sender short code, conversation ID, order number, or phone number in EXTRA_TITLE. Those values
+    // may still be detected when the title itself contains authentication wording, but they cannot
+    // borrow an OTP phrase from a different body field.
+    private val notificationBodyTextKeys =
+        listOf(
+            Notification.EXTRA_TEXT,
+            Notification.EXTRA_SUB_TEXT,
+            Notification.EXTRA_INFO_TEXT,
+            Notification.EXTRA_SUMMARY_TEXT,
+            Notification.EXTRA_BIG_TEXT,
+        )
+
     val notificationTextArrayKeys = listOf(Notification.EXTRA_TEXT_LINES)
 
     fun isNotificationListenerServiceEnabled(context: Context): Boolean =
@@ -95,10 +109,16 @@ class NotificationListener : NotificationListenerService() {
       )
     }
 
-    fun extractNotificationText(notification: Notification): String {
+    fun extractNotificationText(notification: Notification): String =
+        extractNotificationText(notification, notificationTextKeys)
+
+    fun extractNotificationBodyText(notification: Notification): String =
+        extractNotificationText(notification, notificationBodyTextKeys)
+
+    private fun extractNotificationText(notification: Notification, textKeys: List<String>): String {
       val extras = notification.extras
       return buildString {
-        for (key in notificationTextKeys) {
+        for (key in textKeys) {
           extras.getCharSequence(key)?.toString()?.takeIf { it.isNotEmpty() }?.let {
             append(it).append('\n')
           }
@@ -146,6 +166,7 @@ class NotificationListener : NotificationListenerService() {
     AppLogger.d(TAG, "onNotificationPosted: pkg=${sbn.packageName}, id=${sbn.id}")
     val notification = sbn.notification
     val rawNotificationText = extractNotificationText(notification)
+    val rawNotificationBodyText = extractNotificationBodyText(notification)
 
     if (!autoUpdatingListenerUtils.awaitCodeExtractor()) return
     val listenerSettings = autoUpdatingListenerUtils.current()
@@ -170,7 +191,12 @@ class NotificationListener : NotificationListenerService() {
     if (listenerSettings.modeOfOperation == ModeOfOperation.Notification) {
       val codeExtractor = listenerSettings.codeExtractor ?: return
       val notificationText = codeExtractor.cleanup(rawNotificationText)
-      val code = NotificationCodeSelector.selectCode(rawNotificationText, codeExtractor)
+      val code =
+          NotificationCodeSelector.selectCode(
+              rawNotificationText,
+              codeExtractor,
+              rawNotificationBodyText,
+          )
       if (code.isNullOrEmpty()) {
         AppLogger.d(TAG, "no code found in notification, pkg=${sbn.packageName}")
       } else {
