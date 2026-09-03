@@ -254,12 +254,16 @@ class CodeExtractor // this comment is to separate parts
               ),
           )
 
+  // Every numeric token before a later sensitive phrase is emitted as its own match. The phrase is
+  // captured only through look-ahead, so matching an earlier number does not consume the text up to
+  // the phrase and hide a closer OTP candidate. Candidate ranking can therefore choose the number
+  // nearest the authentication phrase (e.g. `244080 923030 ... one-time password` -> `923030`).
   val specialCodeMatcher =
-      """((?:[\d\u0660-\u0669\u06F0-\u06F9]-?){4,}(?=\s)|[\d\u0660-\u0669\u06F0-\u06F9 ]{4,}(?=\s)|[\d\u0660-\u0669\u06F0-\u06F9]{4,})[^:]*(${
+      """(?<![\d\u0660-\u0669\u06F0-\u06F9])((?:[\d\u0660-\u0669\u06F0-\u06F9](?:-?[\d\u0660-\u0669\u06F0-\u06F9]){3,})|(?:[\d\u0660-\u0669\u06F0-\u06F9](?: [\d\u0660-\u0669\u06F0-\u06F9]){3,}))(?![\d\u0660-\u0669\u06F0-\u06F9])(?=[^:]*?(${
         sensitivePhrases.joinToString(
             "|",
         )
-      })"""
+      }))"""
           .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 
   val ignoredPhrasesRegex =
