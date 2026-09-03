@@ -23,8 +23,8 @@ object NotificationCodeSelector {
 
     val lines =
         rawText.lineSequence()
-            .map(String::trim)
-            .filter(String::isNotEmpty)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
             .distinct()
             .toList()
 
@@ -32,7 +32,7 @@ object NotificationCodeSelector {
       if (extractor.shouldIgnore(line)) continue
       val cleanedLine = extractor.cleanup(line)
       if (cleanedLine.isBlank()) continue
-      extractor.getCode(cleanedLine, false)?.takeIf(String::isNotBlank)?.let { return it }
+      extractor.getCode(cleanedLine, false)?.takeIf { it.isNotBlank() }?.let { return it }
     }
 
     // Keep compatibility with providers that split e.g. "123456" and "Your verification code"
@@ -40,6 +40,6 @@ object NotificationCodeSelector {
     if (extractor.shouldIgnore(rawText)) return null
     val cleanedText = extractor.cleanup(rawText)
     if (cleanedText.isBlank()) return null
-    return extractor.getCode(cleanedText, false)?.takeIf(String::isNotBlank)
+    return extractor.getCode(cleanedText, false)?.takeIf { it.isNotBlank() }
   }
 }
