@@ -14,6 +14,7 @@ import io.github.jd1378.otphelper.di.AutoUpdatingListenerUtils
 import io.github.jd1378.otphelper.di.RecentDetectedCodesHolder
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.MonitoringHealthStore
+import io.github.jd1378.otphelper.utils.NotificationCodeSelector
 import io.github.jd1378.otphelper.worker.CodeDetectedWorker
 import javax.inject.Inject
 
@@ -61,10 +62,10 @@ class AccessibilityNotificationService : AccessibilityService() {
 
     val extractor = listenerSettings.codeExtractor ?: return
     val rawText = collectNotificationText(event, notification)
-    if (rawText.isBlank() || extractor.shouldIgnore(rawText)) return
+    if (rawText.isBlank()) return
 
     val cleanedText = extractor.cleanup(rawText)
-    val code = extractor.getCode(cleanedText, false)?.takeIf { it.isNotBlank() } ?: return
+    val code = NotificationCodeSelector.selectCode(rawText, extractor) ?: return
     val signature = RecentDetectedCodesHolder.signature(packageName, code)
     if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) return
 
