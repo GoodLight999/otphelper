@@ -36,6 +36,23 @@ class CodeExtractorHardeningTest {
   }
 
   @Test
+  fun nearestNumberBeforeJapaneseOtpPhraseWins() {
+    val message = "244080 923030は、Amazonのワンタイムパスワードです。"
+    assertEquals("923030", extractor.getCode(message, doCleanup = false))
+  }
+
+  @Test
+  fun nearestNumberBeforeSplitJapaneseOtpPhraseWinsAcrossLines() {
+    val message =
+        """
+        244080
+        923030
+        Amazonのワンタイムパスワードです。
+        """.trimIndent()
+    assertEquals("923030", extractor.getCode(message, doCleanup = false))
+  }
+
+  @Test
   fun cardQualifierDoesNotSuppressExplicitVerificationCode() {
     val message = "Your card verification code is 246810."
     assertEquals("246810", extractor.getCode(message))
