@@ -65,7 +65,9 @@ class AccessibilityNotificationService : AccessibilityService() {
     if (rawText.isBlank()) return
 
     val cleanedText = extractor.cleanup(rawText)
-    val code = NotificationCodeSelector.selectCode(rawText, extractor) ?: return
+    val crossLineText =
+        notification?.let(NotificationListener::extractNotificationBodyText) ?: rawText
+    val code = NotificationCodeSelector.selectCode(rawText, extractor, crossLineText) ?: return
     val signature = RecentDetectedCodesHolder.signature(packageName, code)
     if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) return
 
