@@ -10,6 +10,7 @@ import android.content.res.Resources
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
@@ -127,6 +128,26 @@ class NotificationListener : NotificationListenerService() {
           extras.getCharSequenceArray(key)?.forEach { value ->
             if (!value.isNullOrBlank()) append(value).append('\n')
           }
+        }
+
+        // MessagingStyle can carry message bodies in EXTRA_MESSAGES even when the flattened
+        // EXTRA_TEXT/BIG_TEXT fields are incomplete. Use the public AndroidX extractor rather than
+        // depending on the internal Bundle layout. Current messages are appended newest-first so a
+        // recent OTP is not outranked by an older authentication message in the same conversation.
+        // Historic messages are intentionally excluded: they are conversation history, not current
+        // notification content, and can contain already-expired OTPs.
+        try {
+          NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification)
+              ?.messages
+              ?.asReversed()
+              ?.forEach { message ->
+                message.text?.toString()?.takeIf { it.isNotEmpty() }?.let {
+                  append(it).append('\n')
+                }
+              }
+        } catch (_: RuntimeException) {
+          // Malformed/OEM extras must not crash notification ingestion. The standard public text
+          // fields collected above remain usable as the fallback representation.
         }
       }
     }
