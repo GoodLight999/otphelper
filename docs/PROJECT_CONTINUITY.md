@@ -13,6 +13,8 @@ Read this file before changing signing, upstream-sync, OTP extraction, MagicOS p
 - Upstream `main` language additions through commit `dc5c57cfc031a18d552752961d38c9957827c82a` were reviewed and selectively incorporated.
 - Fork version suffixes remain `-magic` and `-magic-play`.
 
+Always refresh upstream release and `main` before assuming these two upstream markers are still current.
+
 ## Permanent Android signing identity — DO NOT ROTATE
 
 The fork has one permanent signing identity. Android update continuity depends on preserving this exact private key.
@@ -41,12 +43,31 @@ Required GitHub Actions Secrets are exactly:
 
 1. Never generate a replacement signing key for routine development or releases.
 2. Never change `.github/signing/otphelper-cert-sha256.txt` merely to make CI pass.
-3. If a supplied JKS does not match the pinned certificate, reject it.
+3. If a supplied JKS does not match the pinned certificate, reject it before writing any GitHub Secret.
 4. If signing Secrets are unavailable, do not publish an installable APK under a disposable key.
 5. Both manual artifacts and GitHub prereleases use the same four Secrets and the same certificate pin.
 6. Every distributed APK is verified with `apksigner` after build.
 7. The bootstrap generator refuses to create a second identity once a repository pin exists.
 8. Deliberate signer rotation is a separate migration event and must never occur as an incidental fix.
+
+### Configuring the existing signer
+
+Use `tools/configure-otphelper-signing-secrets.ps1` with an existing backup of the permanent JKS. The helper:
+
+- never generates a key;
+- exports the JKS certificate first;
+- requires its SHA-256 to equal the repository pin before writing any Secret;
+- writes exactly the four private Secret values through `gh secret set` standard input without appending a newline.
+
+Example shape only; do not put secret values in chat or source control:
+
+```powershell
+pwsh ./tools/configure-otphelper-signing-secrets.ps1 `
+  -KeystorePath '<private-path-to-existing-jks>' `
+  -ConfirmConfigure
+```
+
+After configuration, re-run Android CI and require `Verify fixed signing keystore`, `Verify fixed signing certificate`, and fixed-signed APK artifact upload to execute successfully rather than skip.
 
 ### Private-key recovery across ChatGPT threads
 
@@ -88,7 +109,11 @@ Priority rules:
 5. Locally penalize or reject competing identifiers such as order, tracking, reservation, invoice, account, card, coupon, product, source/error/status, QR, version/build, serial, postal, and similar IDs.
 6. Do not globally blacklist a whole message merely because it also contains a competing identifier; a real OTP may coexist in the same notification.
 7. Preserve multilingual phrases and Unicode boundaries.
-8. Add regression tests for every false positive or false negative before broadening a generic regex.
+8. Evaluate notification lines locally before cross-line inference. Bare title/sender/conversation metadata must not borrow an authentication phrase from a separate body field.
+9. When structured Android notification fields are available, cross-line fallback uses body fields and excludes title metadata.
+10. A pre-phrase numeric matcher must enumerate competing numeric candidates independently instead of consuming from the first number through a later authentication phrase.
+11. Preserve legitimate grouped OTP forms such as `123 456`, but do not merge independent long values such as `244080 923030`; current grouped numeric matching joins space-separated groups only when every group is at most three digits.
+12. Add regression tests for every false positive or false negative before broadening a generic regex. Real-notification invariants are recorded in `docs/OTP_DETECTION_REGRESSIONS.md`.
 
 The precision-first phrase profile retained in the operator's File Library was reviewed when strengthening these defaults. Its useful authentication contexts and decoy categories were adapted to local candidate ranking rather than copied blindly into global ignore rules.
 
@@ -115,6 +140,8 @@ Current tests cover, among other cases:
 
 - origin-bound WebOTP beats human-text decoys;
 - explicit verification/login code beats earlier account/order/technical IDs;
+- the observed `244080` notification-metadata false positive resolves to body OTP `923030`, including flattened and split-line variants;
+- grouped OTPs such as English/Spanish Instagram `123 456` remain normalized to `123456` rather than being broken by the metadata-number fix;
 - order/tracking/coupon/source/status codes are rejected without authentication context;
 - MFA/access/temporary-passcode and expanded Japanese authentication wording;
 - raw word `off` no longer globally suppresses a real OTP notification while percentage-discount wording remains ignorable;
@@ -125,17 +152,23 @@ Current tests cover, among other cases:
 
 ## CI status and expectations
 
-At commit `912da3ee0f5343229cb2b2be54e3fd8561c33796`, Android CI completed successfully, including the static build/test job and Android API 35/36 emulator smoke tests.
+Do not encode a supposed “latest passing SHA” in this handoff. Draft PR #1 and current-head GitHub Actions are the source of truth because every follow-up commit invalidates a previous green run.
 
-A contemporaneous Privacy contracts run failed only because its signing-bootstrap smoke test still generated a throwaway certificate while production verification had just become repository-pinned. The bootstrap test was subsequently updated to use an isolated temporary pin without weakening production verification, and the corrected Privacy contracts run passed.
+For a normal current-head validation require all of these to pass:
 
-For a releasable state require all current-head workflows to pass, then require a run with the real fixed signing Secrets where certificate-verification steps execute rather than skip.
+- `Test`;
+- `Privacy contracts`;
+- Android CI `static-build-and-test`;
+- Android API 35 emulator smoke test;
+- Android API 36 emulator smoke test.
+
+For a **releasable fixed-signed** state, also require a current-head Android CI run with the real four signing Secrets in which pre-build JKS verification, post-build APK certificate verification, and fixed-signed APK artifact upload execute successfully rather than skip.
 
 ## Remaining operator-side release dependency
 
-The GitHub connector available to ChatGPT cannot write GitHub Secrets. Therefore the four permanent signing Secrets must exist in repository Actions Secrets before fixed-signed distributable artifacts can be produced by GitHub Actions.
+The GitHub connector available to ChatGPT cannot write GitHub Actions Secrets. Therefore the four permanent signing Secrets must be configured from an authenticated operator environment before fixed-signed distributable artifacts can be produced by GitHub Actions.
 
-Once Secrets are installed, future threads should verify their presence indirectly by running CI/release workflows and confirming that fixed-signing verification executes successfully. GitHub Secrets are intentionally unreadable after creation.
+Use `tools/configure-otphelper-signing-secrets.ps1`; do not use the bootstrap generator to create another key. Once Secrets are installed, future threads should verify their presence indirectly by running CI/release workflows and confirming that fixed-signing verification executes successfully. GitHub Secrets are intentionally unreadable after creation.
 
 ## Physical-device migration
 
@@ -146,10 +179,11 @@ After the permanent-signed installation is established, every later build using 
 ## Future-thread startup checklist
 
 1. Read this file.
-2. Read the newest `docs/NEXT_THREAD_*.md` if present.
-3. Inspect Draft PR #1 and current workflow results.
-4. Fetch upstream `jd1378/otphelper` current release and `main` before syncing; preserve explicit fork divergences.
-5. Never rotate the signing key.
-6. Do not request or expose private vault contents unless private-key recovery is actually needed.
-7. If private recovery is needed, first look for `otphelper-signing-vault-PRIVATE.txt` in the user's private project/File Library; if unavailable, use another operator backup rather than creating a new signer.
-8. Keep this continuity file current whenever architecture, signing identity, phrase-default migration version, release process, or major physical-device findings change.
+2. Read `docs/OTP_DETECTION_REGRESSIONS.md` before changing OTP extraction or notification parsing.
+3. Read the newest `docs/NEXT_THREAD_*.md` if present.
+4. Inspect Draft PR #1 and current workflow results.
+5. Fetch upstream `jd1378/otphelper` current release and `main` before syncing; preserve explicit fork divergences.
+6. Never rotate the signing key.
+7. Do not request or expose private vault contents unless private-key recovery is actually needed.
+8. If private recovery is needed, first look for `otphelper-signing-vault-PRIVATE.txt` in the user's private project/File Library; if unavailable, use another operator backup rather than creating a new signer.
+9. Keep this continuity file current whenever architecture, signing identity, phrase-default migration version, release process, OTP invariants, or major physical-device findings change.
