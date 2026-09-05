@@ -2,59 +2,67 @@
 
 These PowerShell 7 helpers make the one unavoidable signing transition reproducible, prevent a mistaken APK from destroying the current app data, and collect consistent HONOR physical-test evidence without copying notification databases or broad notification dumps.
 
-Read [`../docs/SIGNING_MIGRATION.md`](../docs/SIGNING_MIGRATION.md) before changing the signing identity. Read [`../docs/HONOR_PHYSICAL_TEST_PLAN.md`](../docs/HONOR_PHYSICAL_TEST_PLAN.md) before running physical release gates.
+Read [`../docs/SIGNING_MIGRATION.md`](../docs/SIGNING_MIGRATION.md) before changing signing configuration. Read [`../docs/HONOR_PHYSICAL_TEST_PLAN.md`](../docs/HONOR_PHYSICAL_TEST_PLAN.md) before running physical release gates.
 
-## `new-otphelper-signing-key.ps1`
+## Permanent signing identity
 
-Guarded bootstrap for the permanent fork signing identity.
+This repository already has one permanent Android signing identity. Its public certificate SHA-256 is pinned in:
+
+`.github/signing/otphelper-cert-sha256.txt`
+
+Do **not** generate another key for routine builds, Secret setup, or recovery. Android update continuity depends on preserving the existing private key that matches that pin.
+
+Exactly four GitHub Actions Secrets carry private signing material:
+
+- `OTPHELPER_SIGNING_KEYSTORE_B64`;
+- `OTPHELPER_KEYSTORE_PASSWORD`;
+- `OTPHELPER_KEY_ALIAS`;
+- `OTPHELPER_KEY_PASSWORD`.
+
+The expected certificate SHA-256 is deliberately public and repository-pinned; it is not a fifth mutable Secret.
+
+## `configure-otphelper-signing-secrets.ps1`
+
+Use this helper to install an **existing backup of the permanent JKS** into GitHub Actions Secrets without creating or rotating a signer.
 
 Requirements:
 
 - PowerShell 7;
 - JDK 17+ with `keytool` in `PATH`;
-- optional authenticated GitHub CLI when using `-ConfigureGitHubSecrets`.
+- authenticated GitHub CLI (`gh`) with permission to set Actions Secrets for `GoodLight999/otphelper`;
+- the existing permanent JKS and its existing password.
 
-Create local signing material:
+Example:
 
 ```powershell
-pwsh ./tools/new-otphelper-signing-key.ps1 `
-  -OutputDirectory ./otphelper-signing-output `
-  -ConfirmCreate
+pwsh ./tools/configure-otphelper-signing-secrets.ps1 `
+  -KeystorePath 'C:\private\otphelper-permanent-signing.jks' `
+  -ConfirmConfigure
 ```
 
-The script refuses to overwrite a non-empty directory and prompts twice for one strong password used by both the JKS and its key entry. It passes that password to `keytool` through an environment variable rather than a command-line argument.
+The helper performs the important check **before writing any Secret**: it exports the certificate from the supplied JKS and requires its SHA-256 to equal `.github/signing/otphelper-cert-sha256.txt`. A mismatched JKS is rejected. It never changes the public pin and never generates a key.
 
-Output includes:
+The password is read as a secure prompt by default. For controlled automation, `-PasswordEnvironmentVariable <NAME>` reads it from an environment variable. Secret values are sent to `gh secret set` through exact standard-input writes without adding a newline.
+
+After all four Secrets are configured, re-run Android CI. `Verify fixed signing keystore` and `Verify fixed signing certificate` must **execute successfully rather than skip**, and fixed-signed APK artifact upload must execute.
+
+## `new-otphelper-signing-key.ps1`
+
+Guarded **bootstrap-only** generator retained for reproducibility and CI contract tests. The live repository already has a public signer pin, so normal invocation intentionally refuses to create a second identity.
+
+Do not remove or weaken that refusal to make Secret setup easier. Use `configure-otphelper-signing-secrets.ps1` with the existing JKS instead.
+
+The bootstrap tool remains useful only for isolated test environments where `OTPHELPER_SIGNING_BOOTSTRAP_TEST=1` is deliberately set by the repository's signing-contract test. Its generated format is:
 
 - `otphelper-permanent-signing.jks` — secret private signing material;
 - `otphelper-signing-certificate.pem` — public certificate;
-- `otphelper-signing-certificate-sha256.txt` — pinned signer fingerprint;
-- `otphelper-signing-keystore-base64.txt` — value for the JKS GitHub Secret;
+- `otphelper-signing-certificate-sha256.txt` — public signer fingerprint;
+- `otphelper-signing-keystore-base64.txt` — Base64 encoding of the JKS;
 - `SHA256SUMS.txt` — copy-verification hashes;
 - `manifest.json` — non-secret generation metadata;
 - `README.txt` — local recovery instructions and Secret mapping.
 
-The password is never written to disk.
-
-To configure all five repository Secrets through standard input to `gh secret set`:
-
-```powershell
-pwsh ./tools/new-otphelper-signing-key.ps1 `
-  -OutputDirectory ./otphelper-signing-output `
-  -Repository GoodLight999/otphelper `
-  -ConfigureGitHubSecrets `
-  -ConfirmCreate
-```
-
-The required Secrets are:
-
-- `OTPHELPER_SIGNING_KEYSTORE_B64`;
-- `OTPHELPER_KEYSTORE_PASSWORD`;
-- `OTPHELPER_KEY_ALIAS`;
-- `OTPHELPER_KEY_PASSWORD`;
-- `OTPHELPER_SIGNING_CERT_SHA256`.
-
-Create and verify at least two independent encrypted backups of the JKS and password before using the key. Do not uninstall the current physical-test APK merely because key generation succeeded.
+The bootstrap script uses one password for the JKS and its key entry and never writes that password to disk. Its `-ConfigureGitHubSecrets` path configures the same four private Secrets listed above; certificate identity remains repository-pinned.
 
 ## `otphelper-adb-migration.ps1`
 
@@ -92,7 +100,7 @@ Keep the complete backup directory private. It can contain app settings and OTP 
 
 ### Restore after installing the permanent-key debug APK
 
-After uninstalling the old-signature APK and installing the permanent-key **debuggable** APK, pass the permanent certificate fingerprint pinned in `OTPHELPER_SIGNING_CERT_SHA256`:
+After uninstalling the old-signature APK and installing the permanent-key **debuggable** APK, pass the permanent certificate fingerprint from `.github/signing/otphelper-cert-sha256.txt`:
 
 ```powershell
 pwsh ./tools/otphelper-adb-migration.ps1 `
