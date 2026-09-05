@@ -10,6 +10,12 @@ param(
 
     [string]$PasswordEnvironmentVariable,
 
+    [string]$VerificationWorkflow = 'ci.yml',
+
+    [string]$VerificationRef = 'agent/magicos-resilience-and-backup',
+
+    [switch]$TriggerVerificationWorkflow,
+
     [switch]$ConfirmConfigure
 )
 
@@ -30,12 +36,12 @@ function Assert-Command {
     return $command.Source
 }
 
-function Set-GitHubSecretFromText {
+function Invoke-GitHubProcess {
     param(
         [Parameter(Mandatory)][string]$GhPath,
-        [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$Value,
-        [Parameter(Mandatory)][string]$TargetRepository
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [string]$StandardInputValue,
+        [Parameter(Mandatory)][string]$FailureDescription
     )
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -46,29 +52,32 @@ function Set-GitHubSecretFromText {
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.Environment['GH_PROMPT_DISABLED'] = '1'
-    foreach ($argument in @('secret', 'set', $Name, '--repo', $TargetRepository)) {
+    foreach ($argument in $Arguments) {
         [void]$startInfo.ArgumentList.Add($argument)
     }
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
     if (-not $process.Start()) {
-        throw "Unable to start GitHub CLI while configuring $Name."
+        throw "Unable to start GitHub CLI while $FailureDescription."
     }
 
     $stdoutTask = $process.StandardOutput.ReadToEndAsync()
     $stderrTask = $process.StandardError.ReadToEndAsync()
     try {
-        # Write the exact value without a trailing newline. Passwords and Base64 input are treated
-        # as byte-sensitive transport data by the signing pipeline.
-        $process.StandardInput.Write($Value)
+        if ($PSBoundParameters.ContainsKey('StandardInputValue')) {
+            # Write the exact value without a trailing newline. Passwords and Base64 input are
+            # treated as byte-sensitive transport data by the signing pipeline.
+            $process.StandardInput.Write($StandardInputValue)
+        }
         $process.StandardInput.Close()
         $process.WaitForExit()
         $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
         $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
         if ($process.ExitCode -ne 0) {
-            throw "gh secret set failed for $Name ($($process.ExitCode)):`n$stdout`n$stderr"
+            throw "$FailureDescription failed ($($process.ExitCode)):`n$stdout`n$stderr"
         }
+        return $stdout
     }
     finally {
         if (-not $process.HasExited) {
@@ -76,8 +85,46 @@ function Set-GitHubSecretFromText {
         }
         $process.Dispose()
     }
+}
+
+function Set-GitHubSecretFromText {
+    param(
+        [Parameter(Mandatory)][string]$GhPath,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Value,
+        [Parameter(Mandatory)][string]$TargetRepository
+    )
+
+    Invoke-GitHubProcess `
+        -GhPath $GhPath `
+        -Arguments @('secret', 'set', $Name, '--repo', $TargetRepository) `
+        -StandardInputValue $Value `
+        -FailureDescription "configuring GitHub Secret $Name" | Out-Null
 
     Write-Host "PASS GitHub Secret configured: $Name"
+}
+
+function Start-VerificationWorkflow {
+    param(
+        [Parameter(Mandatory)][string]$GhPath,
+        [Parameter(Mandatory)][string]$TargetRepository,
+        [Parameter(Mandatory)][string]$Workflow,
+        [Parameter(Mandatory)][string]$Ref
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Workflow)) {
+        throw 'Verification workflow identifier must not be blank.'
+    }
+    if ([string]::IsNullOrWhiteSpace($Ref)) {
+        throw 'Verification ref must not be blank.'
+    }
+
+    Invoke-GitHubProcess `
+        -GhPath $GhPath `
+        -Arguments @('workflow', 'run', $Workflow, '--repo', $TargetRepository, '--ref', $Ref) `
+        -FailureDescription 'triggering fixed-signing verification workflow' | Out-Null
+
+    Write-Host "PASS verification workflow triggered: $Workflow @ $Ref"
 }
 
 if (-not $ConfirmConfigure) {
@@ -176,7 +223,19 @@ Do not change the repository pin to make this JKS pass. Restore the existing per
     Set-GitHubSecretFromText $gh 'OTPHELPER_KEY_PASSWORD' $password $Repository
 
     Write-Host 'PASS all four permanent signing Secrets configured.'
-    Write-Host 'Re-run Android CI and require both fixed-signing verification steps to execute rather than skip.'
+
+    if ($TriggerVerificationWorkflow) {
+        Start-VerificationWorkflow `
+            -GhPath $gh `
+            -TargetRepository $Repository `
+            -Workflow $VerificationWorkflow `
+            -Ref $VerificationRef
+        Write-Host 'Require Verify fixed signing keystore, Verify fixed signing certificate, and fixed-signed APK upload to execute successfully rather than skip.'
+    }
+    else {
+        Write-Host 'Next: re-run Android CI and require both fixed-signing verification steps to execute rather than skip.'
+        Write-Host "One-command trigger: re-run this helper with -TriggerVerificationWorkflow (workflow $VerificationWorkflow, ref $VerificationRef)."
+    }
 }
 finally {
     Remove-Item Env:OTPHELPER_KEYTOOL_PASSWORD -ErrorAction SilentlyContinue
