@@ -40,6 +40,11 @@ if [[ "${1:-}" == "secret" && "${2:-}" == "set" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "workflow" && "${2:-}" == "run" ]]; then
+  printf '%s\n' "$@" > "${OTPHELPER_FAKE_GH_CAPTURE:?}/workflow-run.args"
+  exit 0
+fi
+
 echo "unexpected fake gh invocation: $*" >&2
 exit 2
 '@
@@ -175,9 +180,10 @@ if (Test-Path -LiteralPath $unexpectedLegacySecret -PathType Leaf) {
 
 # Exercise the post-bootstrap path that operators actually use now that the permanent identity
 # already exists. First prove that a JKS that does not match the committed production pin is refused
-# before any Secret write. Then temporarily substitute the throwaway pin inside this isolated CI
-# checkout and prove exact four-Secret transport on the success path. The original pin is restored in
-# a finally block before any later CI verification can observe the test value.
+# before any Secret write or workflow trigger. Then temporarily substitute the throwaway pin inside
+# this isolated CI checkout and prove exact four-Secret transport plus the opt-in Android CI trigger.
+# The original pin is restored in a finally block before any later CI verification can observe the
+# test value.
 $repositoryPin = Join-Path $PSScriptRoot '..' 'signing' 'otphelper-cert-sha256.txt'
 $productionPinBytes = [System.IO.File]::ReadAllBytes($repositoryPin)
 Get-ChildItem -LiteralPath $captureDirectory -File -ErrorAction SilentlyContinue |
@@ -193,6 +199,7 @@ try {
             -KeystorePath $keystore `
             -PasswordEnvironmentVariable OTPHELPER_TEST_SIGNING_PASSWORD `
             -Repository GoodLight999/otphelper `
+            -TriggerVerificationWorkflow `
             -ConfirmConfigure
     }
     catch {
@@ -205,7 +212,7 @@ try {
         throw 'Existing-signer configurator accepted a JKS that does not match the production pin.'
     }
     if (@(Get-ChildItem -LiteralPath $captureDirectory -File -ErrorAction SilentlyContinue).Count -ne 0) {
-        throw 'Existing-signer configurator wrote a Secret before rejecting a mismatched JKS.'
+        throw 'Existing-signer configurator wrote a Secret or triggered CI before rejecting a mismatched JKS.'
     }
 
     [System.IO.File]::WriteAllText(
@@ -218,6 +225,9 @@ try {
         -KeystorePath $keystore `
         -PasswordEnvironmentVariable OTPHELPER_TEST_SIGNING_PASSWORD `
         -Repository GoodLight999/otphelper `
+        -VerificationWorkflow ci.yml `
+        -VerificationRef agent/magicos-resilience-and-backup `
+        -TriggerVerificationWorkflow `
         -ConfirmConfigure
 }
 finally {
@@ -248,8 +258,27 @@ foreach ($entry in $expectedSecrets.GetEnumerator()) {
 if (Test-Path -LiteralPath $unexpectedLegacySecret -PathType Leaf) {
     throw 'Existing-signer configurator must not transport the certificate fingerprint as a Secret.'
 }
+
+$workflowArgsPath = Join-Path $captureDirectory 'workflow-run.args'
+if (-not (Test-Path -LiteralPath $workflowArgsPath -PathType Leaf)) {
+    throw 'Existing-signer configurator did not trigger the requested verification workflow.'
+}
+$expectedWorkflowArgs = @(
+    'workflow',
+    'run',
+    'ci.yml',
+    '--repo',
+    'GoodLight999/otphelper',
+    '--ref',
+    'agent/magicos-resilience-and-backup'
+)
+$actualWorkflowArgs = [System.IO.File]::ReadAllLines($workflowArgsPath)
+if (($actualWorkflowArgs -join "`n") -cne ($expectedWorkflowArgs -join "`n")) {
+    throw "Existing-signer configurator triggered an unexpected workflow command: $($actualWorkflowArgs -join ' ')"
+}
+
 if ((Get-Content -LiteralPath $repositoryPin -Raw).Trim().ToLowerInvariant() -eq $fingerprint) {
     throw 'Signing contract test failed to restore the production repository pin.'
 }
 
-Write-Host 'Signing bootstrap and existing-signer configuration verified: pin rejection, JKS, certificate, Base64, and exact four-Secret transport.'
+Write-Host 'Signing bootstrap and existing-signer configuration verified: pin rejection, JKS, certificate, Base64, exact four-Secret transport, and opt-in fixed-signing CI trigger.'
