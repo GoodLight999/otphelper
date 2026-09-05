@@ -1,9 +1,9 @@
 # OTP Helper — HONOR MagicOS resilience fork
 
-This repository is a maintained fork of [`jd1378/otphelper`](https://github.com/jd1378/otphelper). It preserves the original offline OTP/SMS functionality while adding a dedicated resilience layer for HONOR MagicOS, Android 15/16 notification restrictions, complete phrase-list backup, and reproducible diagnostics.
+This repository is a maintained fork of [`jd1378/otphelper`](https://github.com/jd1378/otphelper). It preserves the original offline OTP/SMS functionality while adding a dedicated resilience layer for HONOR MagicOS, Android 15/16 notification restrictions, safer candidate-ranked OTP extraction, complete phrase-list backup, and reproducible diagnostics.
 
 > [!IMPORTANT]
-> No current APK from this fork is offered as a stable download yet. The earlier physical-test APK was signed by an ephemeral CI debug key whose private key no longer exists. CI now refuses to upload installable APKs until one permanent signing identity is configured and verified. Do not treat an old Actions artifact as an update channel.
+> No current APK from this fork is offered as a stable download yet. The earlier physical-test APK was signed by an ephemeral CI debug key whose private key no longer exists. The fork now has one permanent signing identity, but CI refuses distributable APK upload until that **existing** signer is installed in repository Actions Secrets and verified. Do not treat an old Actions artifact as an update channel, and do not generate a replacement permanent key merely to unblock CI.
 
 ## Fork status
 
@@ -18,8 +18,10 @@ Start with the canonical current-state handoff:
 
 Architecture and operational rules:
 
+- [`docs/PROJECT_CONTINUITY.md`](docs/PROJECT_CONTINUITY.md)
 - [`docs/FORK_MAINTENANCE.md`](docs/FORK_MAINTENANCE.md)
 - [`docs/PLATFORM_CONTRACTS.md`](docs/PLATFORM_CONTRACTS.md)
+- [`docs/OTP_DETECTION_REGRESSIONS.md`](docs/OTP_DETECTION_REGRESSIONS.md)
 - [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md)
 - [`docs/HONOR_PHYSICAL_TEST_PLAN.md`](docs/HONOR_PHYSICAL_TEST_PLAN.md)
 - [`docs/DATA_BACKUP_POLICY.md`](docs/DATA_BACKUP_POLICY.md)
@@ -48,7 +50,15 @@ Android's explicit **Force stop** places the package in the stopped state. An or
 3. **Shizuku repair** — optional Android 15+ repair for the standard listener. Shizuku is not used as a general notification reader.
 4. **SMS receiver** — independent path retained in the normal flavor.
 
-The standard listener and Accessibility path share package+code duplicate suppression.
+The standard listener and Accessibility path share package+code duplicate suppression. Service/Binder connection is never presented as proof that a particular third-party OTP body was exposed.
+
+### Safer OTP selection
+
+The fork does not accept the first code-looking token blindly. It prefers standards-based WebOTP, ranks heuristic candidates by authentication context/proximity, and locally penalizes competing identifiers such as order/tracking/account/coupon/technical IDs.
+
+Notification title/sender/conversation metadata is evaluated separately from body authentication text so a bare metadata number cannot borrow an OTP phrase from another field. Cross-line fallback uses body fields when structured notification data is available.
+
+Reported false positives/negatives are retained as regressions. In particular, the observed `244080` / `923030` case must select `923030`, while grouped OTP forms such as `123 456` remain supported and normalize to `123456`.
 
 ### Phrase backup
 
@@ -60,6 +70,8 @@ The sensitive/detection, ignored/exclusion, and cleanup/removal phrase screens s
 - JSON string arrays and one-phrase-per-line UTF-8 text for individual imports;
 - atomic complete restore;
 - type, schema, version, size, and regular-expression validation.
+
+Persisted default phrases are version-migrated conservatively: untouched historical defaults may upgrade, while edited/imported/reordered/empty/custom lists are preserved.
 
 ### Diagnostics and validation
 
@@ -77,24 +89,22 @@ CI validates:
 - foreground service and watchdog startup;
 - real NotificationListener and Accessibility service binding on API 35 and API 36 emulators;
 - absence of LeakCanary and experiment-only fixtures;
-- signature-protected internal notification actions;
-- fixed signing-certificate identity when signing Secrets are configured;
-- actual disposable-JKS generation, fingerprint derivation, Base64 reconstruction, and JKS reopening;
+- signature-protected/private internal action surfaces;
+- fixed signing-certificate identity when permanent signing Secrets are configured;
+- signing bootstrap and existing-signer configuration contracts, including exact no-newline Secret transport;
 - Android backup allowlists and rejection of committed signing/migration secrets.
 
 ## How OTP detection works
 
-The original application works in two main modes.
-
 ### Notification mode
 
-The app receives posted notifications through the selected notification-ingestion path, combines the available public text fields, applies ignored phrases and cleanup phrases, then matches the configured code-detection rules. The extracted code is handled according to the user's clipboard, notification, history, and optional dismissal settings.
+The app receives posted notifications through the selected ingestion path. It evaluates notification text with field/line boundaries preserved where available, applies ignored/cleanup rules, ranks plausible OTP candidates against authentication context, and handles the selected code according to clipboard, notification, history, and optional dismissal settings.
 
 Android 15/16 or the source app may redact sensitive notification content. A connected listener proves service connectivity, not that a particular third-party OTP body was exposed. Real OTP capability is therefore validated separately on the target firmware.
 
 ### SMS mode
 
-The normal flavor listens for incoming SMS messages, applies the same ignore, cleanup, and detection pipeline, and handles the extracted code according to the user's settings.
+The normal flavor listens for incoming SMS messages, applies the same ignore/cleanup/detection policy, and handles the extracted code according to the user's settings.
 
 ## Local development
 
@@ -127,17 +137,24 @@ A local debug build without the permanent signing environment variables uses the
 
 Release and distributable debug builds require the fixed signing inputs documented in [`docs/SIGNING_MIGRATION.md`](docs/SIGNING_MIGRATION.md).
 
-## Permanent signing bootstrap
+## Permanent signing configuration
 
-Create permanent signing material only after reading the migration runbook:
+The permanent signing identity has **already been created** and its public certificate SHA-256 is pinned in `.github/signing/otphelper-cert-sha256.txt`. Routine work must restore that same identity, never create a replacement.
+
+Exactly four repository Actions Secrets carry the private signer: JKS Base64, keystore password, alias, and key password. The certificate fingerprint is public repository state, not a fifth Secret.
+
+From an authenticated operator environment holding an existing backup of the permanent JKS, the recommended activation command is:
 
 ```powershell
-pwsh ./tools/new-otphelper-signing-key.ps1 `
-  -OutputDirectory ./otphelper-signing-output `
-  -ConfirmCreate
+pwsh ./tools/configure-otphelper-signing-secrets.ps1 `
+  -KeystorePath '<private-path-to-existing-jks>' `
+  -TriggerVerificationWorkflow `
+  -ConfirmConfigure
 ```
 
-Back up the resulting JKS independently before configuring CI or uninstalling any existing APK. The helper never writes the password to disk and can optionally configure the five GitHub Actions Secrets through `gh secret set`.
+Before any Secret write, the helper exports the JKS certificate and requires it to match the repository pin. A mismatch aborts before Secret write or CI dispatch. On success the optional trigger starts ordinary Android CI; it does not publish a release.
+
+`tools/new-otphelper-signing-key.ps1` is retained only as a guarded bootstrap/CI-contract tool and intentionally refuses routine replacement-key generation now that the permanent pin exists.
 
 ## One-time device migration
 
@@ -168,7 +185,7 @@ The workflow deliberately does not generate or upload a Google Play App Bundle. 
 
 The original project and its official store/release channels remain available from [`jd1378/otphelper`](https://github.com/jd1378/otphelper).
 
-Those APKs are signed by identities not controlled by this fork. They are not interchangeable in place with future permanent-key fork builds despite sharing the same package ID.
+Those APKs are signed by identities not controlled by this fork. They are not interchangeable in place with permanent-key fork builds despite sharing the same package ID.
 
 ## Privacy
 
