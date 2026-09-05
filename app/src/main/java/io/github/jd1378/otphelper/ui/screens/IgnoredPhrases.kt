@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.jd1378.otphelper.R
 import io.github.jd1378.otphelper.ui.components.DangerousActionDialog
 import io.github.jd1378.otphelper.ui.components.NewPhraseDialog
+import io.github.jd1378.otphelper.ui.components.PhraseBackupMenuItems
 import io.github.jd1378.otphelper.ui.components.TitleBar
 import io.github.jd1378.otphelper.ui.components.drawVerticalScrollbar
 import io.github.jd1378.otphelper.utils.Clipboard
@@ -63,23 +64,17 @@ fun IgnoredPhrases(
 ) {
   val uriHandler = LocalUriHandler.current
   val context = LocalContext.current
-
   val phrases by viewModel.ignoredPhrases.collectAsStateWithLifecycle()
   val listState = rememberLazyListState()
   val showResetToDefaultDialog = viewModel.showResetToDefaultDialog.collectAsStateWithLifecycle()
-  val showNewIgnoredPhraseDialog =
-      viewModel.showNewIgnoredPhraseDialog.collectAsStateWithLifecycle()
+  val showNewIgnoredPhraseDialog = viewModel.showNewIgnoredPhraseDialog.collectAsStateWithLifecycle()
   val showClearListDialog = viewModel.showClearListDialog.collectAsStateWithLifecycle()
 
   Scaffold(
       modifier = modifier,
       topBar = {
-        TitleBar(
-            upPress = upPress,
-            text = stringResource(R.string.ignored_phrases),
-        ) {
+        TitleBar(upPress = upPress, text = stringResource(R.string.ignored_phrases)) {
           var expanded by remember { mutableStateOf(false) }
-
           Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
             IconButton(onClick = { expanded = true }) {
               Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options))
@@ -106,14 +101,22 @@ fun IgnoredPhrases(
                   leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
               )
               HorizontalDivider()
+              PhraseBackupMenuItems(
+                  filePrefix = "ignored-phrases",
+                  dismissMenu = { expanded = false },
+                  exportCurrent = viewModel::exportCurrent,
+                  importCurrent = viewModel::importCurrent,
+                  exportAll = viewModel::exportAll,
+                  importAll = viewModel::importAll,
+              )
+              HorizontalDivider()
               DropdownMenuItem(
                   text = { Text(stringResource(R.string.copy_ignore_regex)) },
                   onClick = {
                     Clipboard.copyToClipboard(
                         context,
-                        viewModel.autoUpdatingListenerUtils.codeExtractor
-                            ?.ignoredPhrasesRegex
-                            ?.toString() ?: "",
+                        viewModel.autoUpdatingListenerUtils.codeExtractor?.ignoredPhrasesRegex?.toString()
+                            ?: "",
                         false)
                     expanded = false
                   },
@@ -128,9 +131,7 @@ fun IgnoredPhrases(
         }
       },
       floatingActionButton = {
-        FloatingActionButton(
-            onClick = { viewModel.showNewIgnoredPhraseDialog.value = true },
-        ) {
+        FloatingActionButton(onClick = { viewModel.showNewIgnoredPhraseDialog.value = true }) {
           Icon(Icons.Filled.Add, stringResource(R.string.add))
         }
       },
@@ -144,26 +145,20 @@ fun IgnoredPhrases(
         DangerousActionDialog(
             stringResource(R.string.reset_to_default),
             onDismissRequest = { viewModel.showResetToDefaultDialog.value = false },
-        ) {
-          viewModel.resetToDefault()
-        }
+        ) { viewModel.resetToDefault() }
       }
       if (showClearListDialog.value) {
         DangerousActionDialog(
             stringResource(R.string.clear_list),
             onDismissRequest = { viewModel.showClearListDialog.value = false },
-        ) {
-          viewModel.clearList()
-        }
+        ) { viewModel.clearList() }
       }
       if (showNewIgnoredPhraseDialog.value) {
         NewPhraseDialog(
             title = stringResource(R.string.new_ignored_phrase),
             validationPredicate = viewModel::isIgnoredPhraseParsable,
             onDismissRequest = { viewModel.showNewIgnoredPhraseDialog.value = false },
-        ) {
-          viewModel.addNewPhrase(it)
-        }
+        ) { viewModel.addNewPhrase(it) }
       }
 
       val hyperlinkText = stringResource(R.string.learn_more)
@@ -174,32 +169,28 @@ fun IgnoredPhrases(
         append(stringResource(R.string.sensitive_phrases_desc_regex))
         append(" ")
         withStyle(
-            style =
-                SpanStyle(
-                    textDecoration = TextDecoration.Underline,
-                    color = MaterialTheme.colorScheme.primary)) {
-              append(hyperlinkText)
-              addStringAnnotation(
-                  tag = "URL",
-                  annotation = "https://regextutorial.org/",
-                  start = length - hyperlinkText.length,
-                  end = length)
-            }
+            SpanStyle(
+                textDecoration = TextDecoration.Underline,
+                color = MaterialTheme.colorScheme.primary)) {
+          append(hyperlinkText)
+          addStringAnnotation(
+              tag = "URL",
+              annotation = "https://regextutorial.org/",
+              start = length - hyperlinkText.length,
+              end = length)
+        }
       }
-
       ClickableText(
           text = annotatedString,
           onClick = { offset ->
             annotatedString
                 .getStringAnnotations(tag = "URL", start = offset, end = offset)
                 .firstOrNull()
-                ?.let { annotation -> uriHandler.openUriSafely(context, annotation.item) }
+                ?.let { uriHandler.openUriSafely(context, it.item) }
           },
           modifier = Modifier.fillMaxWidth(),
       )
-
       HorizontalDivider(Modifier.padding(top = dimensionResource(R.dimen.padding_page)))
-
       Box(
           modifier =
               Modifier.fillMaxSize()

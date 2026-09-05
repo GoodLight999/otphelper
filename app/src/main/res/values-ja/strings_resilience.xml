@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="export_this_list">このリストをエクスポート</string>
+  <string name="import_this_list">このリストをインポート</string>
+  <string name="export_all_phrase_lists">すべての語句リストを一括エクスポート</string>
+  <string name="import_all_phrase_lists">すべての語句リストを一括インポート</string>
+  <string name="phrase_export_success">語句リストをエクスポートしました。</string>
+  <string name="phrase_export_all_success">すべての語句リストをエクスポートしました。</string>
+  <string name="phrase_backup_failed">インポート／エクスポートに失敗しました：%1$s</string>
+  <plurals name="phrase_import_success">
+    <item quantity="other">%1$d件の語句をインポートしました。</item>
+  </plurals>
+  <plurals name="phrase_import_all_success">
+    <item quantity="other">全リストへ合計%1$d件の語句をインポートしました。</item>
+  </plurals>
+
+  <string name="persistence_channel_name">OTP Helper バックグラウンド監視</string>
+  <string name="persistence_channel_description">通知からのコード検出を常時利用可能に保ち、接続状態を表示します。</string>
+  <string name="persistence_notification_title">OTP Helperが通知を監視しています</string>
+  <string name="persistence_notification_listener_ok">通知Listenerは実際に接続中です</string>
+  <string name="persistence_notification_accessibility_ok">ユーザー補助の通知イベントは接続中ですが、標準Listenerは切断されています</string>
+  <string name="persistence_notification_permission_missing">通知へのアクセスが無効です。修復をタップしてください</string>
+  <string name="persistence_notification_listener_stalled">権限は有効ですがListenerが切断されています。修復をタップしてください</string>
+  <string name="persistence_open_app">アプリを開く</string>
+  <string name="persistence_repair">修復</string>
+  <string name="persistence_repair_started">標準のバックグラウンド修復を実行しました。</string>
+
+  <string name="permission_resilience_desc">標準の権限を付与していても、強力な省電力機能を持つ端末では通知アクセスが切断されることがあります。常駐Foreground Service、未接続時だけのListener再接続、WorkManager監視、Alarm復旧が対応済みの常駐対策です。</string>
+  <string name="permission_honor_recents_lock_desc">HONOR MagicOSでは、設定→アプリ→アプリ起動→OTP Helperで自動管理をオフにし、自動起動・他のアプリによる起動・バックグラウンド実行を許可してください。さらに履歴画面でOTP Helperのカードを下へスワイプし、右上に鍵アイコンが出る状態にします。本版ではOTP Helperが履歴から隠れないよう修正済みです。</string>
+  <string name="permission_advanced_notification_recovery_desc">標準の通知アクセスで動作している場合、以下の機能は不要です。別アプリのOTP本文が伏字になる、または標準Listenerが接続できない場合だけ、高度な修復を開いてください。</string>
+  <string name="show_advanced_notification_recovery">高度な通知修復を表示</string>
+  <string name="hide_advanced_notification_recovery">高度な通知修復を隠す</string>
+  <string name="accessibility_service_label">OTP通知リーダー</string>
+  <string name="accessibility_service_description">Androidの通知ユーザー補助イベントだけを読み、ワンタイムコードを検出します。画面内容の取得、ジェスチャー、キー入力、スクリーンショットは使用しません。端末ロック中は通知の公開版しか渡されない場合があります。</string>
+  <string name="permission_todo_accessibility_notifications">ユーザー補助の通知イベント読取りを有効化</string>
+  <string name="permission_accessibility_notification_desc">Androidの公開ユーザー補助APIによる任意の第2通知読取り経路です。Android 16でもTYPE_NOTIFICATION_STATE_CHANGEDとNotification本体の受渡しは公式仕様として残っています。ただし端末ロック中の非公開通知は公開版へ置換される場合があります。画面内容・ジェスチャー・キー入力・スクリーンショットは要求しません。</string>
+
+  <string name="permission_shizuku_notification_desc">Android 15以降向けの任意の修復手段です。公式Shizuku APIのshell／root権限でRECEIVE_SENSITIVE_NOTIFICATIONS AppOpを設定し、Androidが保持するtrusted Listener情報を更新するため通知アクセスを再登録します。標準の通知アクセスで本文を読める端末、ユーザー補助の通知イベント経路、SMSモードには不要です。</string>
+  <string name="permission_shizuku_status">Shizuku：Manager %1$s／Binder %2$s／権限 %3$s</string>
+  <string name="permission_shizuku_installed">検出済み</string>
+  <string name="permission_shizuku_not_installed">未検出</string>
+  <string name="permission_shizuku_connected">接続済み</string>
+  <string name="permission_shizuku_not_connected">未接続</string>
+  <string name="permission_run_shizuku_repair">Shizukuで通知読取りを修復</string>
+  <string name="persistence_shizuku_applied_connected">機密通知AppOpを適用し、標準通知Listenerの再接続も確認しました。</string>
+  <string name="persistence_shizuku_applied_pending">機密通知AppOpは適用しましたが、標準通知Listenerの再接続はまだ確認できていません。</string>
+  <string name="persistence_shizuku_manager_missing">Shizuku Managerを検出できません。</string>
+  <string name="persistence_shizuku_service_not_running">Shizuku Managerはありますが、サービスのBinderを受信できません。Shizukuを起動してから再実行してください。</string>
+  <string name="persistence_shizuku_unsupported">このShizuku APIバージョンには対応していません。バージョン11以降が必要です。</string>
+  <string name="persistence_shizuku_insufficient_privilege">Shizukuサービスがshellまたはroot権限で動作していません。</string>
+  <string name="persistence_shizuku_permission_denied">OTP HelperへのShizuku権限が拒否されています。</string>
+  <string name="persistence_shizuku_permission_requested">Shizuku権限を要求しました。許可後、もう一度修復を実行してください。</string>
+  <string name="persistence_shizuku_failed">Shizukuによる通知修復に失敗しました：%1$s</string>
+
+  <string name="diagnostics_desc">権限だけでなく、標準通知Listenerとユーザー補助通知イベントの実接続状態、Shizuku Manager／Binder状態、常駐サービス、復旧監視、端末情報、OTPらしき数字を伏せた直近ログを一つの診断レポートにまとめます。</string>
+  <string name="copy_diagnostics">診断レポートをコピー</string>
+  <string name="export_diagnostics">診断レポートをエクスポート</string>
+  <string name="diagnostics_copied">診断レポートをコピーしました。</string>
+  <string name="diagnostics_exported">診断レポートをエクスポートしました。</string>
+  <string name="diagnostics_failed">診断レポートを生成できませんでした：%1$s</string>
+</resources>

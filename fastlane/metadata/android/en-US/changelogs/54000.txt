@@ -1,0 +1,4 @@
+- Synced the fork to upstream OTP Helper 1.20.6 language-regression fixes.
+- Added standards-first WebOTP extraction and ranked competing-code selection.
+- Hardened default rules against order, tracking, account, card, coupon, version and similar non-authentication identifiers.
+- Pinned the fork distribution signing certificate so future release artifacts keep one update identity.

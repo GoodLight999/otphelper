@@ -1,0 +1,54 @@
+name: Privacy contracts
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify backup privacy allowlists
+        run: python3 .github/scripts/verify-backup-rules.py
+      - name: Reject committed private signing, app-data, or device-evidence material
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden='(^|/)(otphelper-signing-output|otphelper-adb-backup|otphelper-device-evidence-[^/]*)(/|$)|\.(jks|keystore)$|signing-keystore-base64.*\.txt$|(^|/)evidence-manifest\.(json|sha256)$'
+          if git ls-files | grep -Ei "$forbidden"; then
+            echo "Private signing, migration, or physical-test evidence material must not be committed" >&2
+            exit 1
+          fi
+      - name: Execute device evidence privacy contract
+        shell: pwsh
+        run: ./.github/scripts/test-device-evidence-collector.ps1
+
+  signing-bootstrap-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Verify JKS generation and exact Secret transport
+        shell: pwsh
+        run: ./.github/scripts/test-signing-bootstrap.ps1

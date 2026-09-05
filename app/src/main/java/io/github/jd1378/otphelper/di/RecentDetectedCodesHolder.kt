@@ -4,10 +4,9 @@ import androidx.compose.runtime.Stable
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// Window during which an identical detection (same package + text + code) is
-// treated as a duplicate and not recorded again. Some apps (e.g. Gmail) repost
-// the same notification with a new notification id within a few seconds, which
-// previously caused the same code to be captured multiple times. See issue #217.
+// Window during which an identical package/code pair is treated as a duplicate. The standard
+// NotificationListener and Accessibility fallback can expose the same notification text in
+// different shapes, so including the full text in the signature would allow double copies.
 const val DUPLICATE_DETECTION_WINDOW_MS = 5_000L
 
 @Singleton
@@ -15,14 +14,14 @@ const val DUPLICATE_DETECTION_WINDOW_MS = 5_000L
 class RecentDetectedCodesHolder @Inject constructor() {
   private val recentSignatures = HashMap<String, Long>()
 
-  // Returns true if an identical detection was already seen within the
-  // deduplication window. Records (or refreshes) the signature otherwise so that
-  // a train of reposts keeps extending the window instead of slipping through.
   @Synchronized
   fun isDuplicate(signature: String, now: Long): Boolean {
     pruneExpired(now)
-    val lastSeen = recentSignatures[signature]
-    recentSignatures[signature] = now
+    // Older callers append normalized notification text. Canonicalizing here makes deduplication
+    // work across the standard listener and the Accessibility fallback without duplicating logic.
+    val canonicalSignature = signature.split('|', limit = 3).take(2).joinToString("|")
+    val lastSeen = recentSignatures[canonicalSignature]
+    recentSignatures[canonicalSignature] = now
     return lastSeen != null && now - lastSeen <= DUPLICATE_DETECTION_WINDOW_MS
   }
 
@@ -33,5 +32,9 @@ class RecentDetectedCodesHolder @Inject constructor() {
         iterator.remove()
       }
     }
+  }
+
+  companion object {
+    fun signature(packageName: String, code: String): String = "$packageName|$code"
   }
 }

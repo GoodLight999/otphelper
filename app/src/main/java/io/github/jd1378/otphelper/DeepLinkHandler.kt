@@ -7,10 +7,10 @@ import android.content.Intent
 import android.os.Build
 import androidx.compose.runtime.Stable
 import androidx.core.net.toUri
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 
 @Singleton
 @Stable
@@ -18,14 +18,14 @@ class DeepLinkHandler @Inject constructor() {
   val event = MutableStateFlow<Event>(Event.None)
 
   fun handleDeepLink(intent: Intent?) {
-    if (intent != null) {
-      // make a copy
-      val editedIntent = Intent(intent)
-      // this is to remove the FLAG_ACTIVITY_NEW_TASK flag, because navigation bugs otherwise
-      editedIntent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP and Intent.FLAG_ACTIVITY_CLEAR_TOP
+    if (intent == null) return
 
-      event.update { Event.NavigateWithDeepLink(editedIntent) }
-    }
+    val editedIntent = Intent(intent)
+    editedIntent.flags =
+        (editedIntent.flags and Intent.FLAG_ACTIVITY_NEW_TASK.inv()) or
+            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+            Intent.FLAG_ACTIVITY_CLEAR_TOP
+    event.update { Event.NavigateWithDeepLink(editedIntent) }
   }
 
   fun consumeEvent() {
@@ -34,32 +34,35 @@ class DeepLinkHandler @Inject constructor() {
 }
 
 sealed interface Event {
-
-  @Stable
-  data class NavigateWithDeepLink(val intent: Intent) : Event
+  @Stable data class NavigateWithDeepLink(val intent: Intent) : Event
 
   data object None : Event
 }
 
 const val OTPHELPER_APP_SCHEME = "otphelper"
 
+internal fun buildDeepLinkIntent(
+    context: Context,
+    route: String,
+    navArgValue: String? = null,
+): Intent {
+  var baseUri = "$OTPHELPER_APP_SCHEME://$route"
+  if (!navArgValue.isNullOrEmpty()) {
+    baseUri += "/$navArgValue"
+  }
+  return Intent(context, MainActivity::class.java)
+      .setAction(Intent.ACTION_VIEW)
+      .setData(baseUri.toUri())
+      .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+}
+
 fun getDeepLinkPendingIntent(
   context: Context,
   route: String,
   navArgValue: String? = null,
 ): PendingIntent {
-  var baseUri = "$OTPHELPER_APP_SCHEME://$route"
-  if (!navArgValue.isNullOrEmpty()) {
-    baseUri += "/$navArgValue"
-  }
-  val routeIntent =
-      Intent(Intent.ACTION_VIEW, baseUri.toUri()).apply {
-        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-      }
-  val flags =
-      PendingIntent.FLAG_IMMUTABLE or
-          PendingIntent.FLAG_UPDATE_CURRENT or
-          PendingIntent.FLAG_CANCEL_CURRENT
+  val routeIntent = buildDeepLinkIntent(context, route, navArgValue)
+  val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
 
   val options = ActivityOptions.makeBasic()
   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

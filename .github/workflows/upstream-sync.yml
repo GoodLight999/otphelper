@@ -1,0 +1,126 @@
+name: Upstream sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream into a bot branch
+        id: merge
+        env:
+          UPSTREAM_REPOSITORY: jd1378/otphelper
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git fetch upstream main
+
+          upstream_sha="$(git rev-parse upstream/main)"
+          base_sha="$(git rev-parse origin/main)"
+          branch="bot/upstream-sync-$(date -u +%Y%m%d)"
+          git switch -C "$branch" origin/main
+
+          if ! git merge --no-ff --no-edit upstream/main; then
+            report="$GITHUB_WORKSPACE/upstream-sync-conflict.md"
+            {
+              echo "# OTP Helper upstream sync conflict"
+              echo
+              echo "- detected: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo "- fork base: \`$base_sha\`"
+              echo "- upstream: \`$upstream_sha\`"
+              echo "- attempted branch: \`$branch\`"
+              echo
+              echo "## Unmerged paths"
+              echo
+              git diff --name-only --diff-filter=U | sed 's/^/- `/' | sed 's/$/`/'
+              echo
+              echo "## Status at conflict"
+              echo
+              echo '```text'
+              git status --short
+              echo '```'
+              echo
+              echo "Resolve manually while preserving the contracts in:"
+              echo
+              echo "- \`docs/CURRENT_HANDOFF.md\`"
+              echo "- \`docs/FORK_MAINTENANCE.md\`"
+              echo "- \`docs/PLATFORM_CONTRACTS.md\`"
+              echo "- \`docs/SIGNING_MIGRATION.md\`"
+              echo "- \`docs/DATA_BACKUP_POLICY.md\`"
+              echo "- \`docs/HONOR_PHYSICAL_TEST_PLAN.md\`"
+            } > "$report"
+            git merge --abort || true
+            {
+              echo "conflict=true"
+              echo "upstream_sha=$upstream_sha"
+              echo "base_sha=$base_sha"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --quiet origin/main...HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git push --force-with-lease origin "$branch"
+          {
+            echo "changed=true"
+            echo "branch=$branch"
+            echo "upstream_sha=$upstream_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open draft pull request for clean upstream merge
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.merge.outputs.branch }}
+          UPSTREAM_SHA: ${{ steps.merge.outputs.upstream_sha }}
+        run: |
+          existing="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --draft \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore: sync jd1378/otphelper upstream" \
+              --body "Automated clean merge from \`jd1378/otphelper:main\` at \`$UPSTREAM_SHA\`. Pull-request workflows validate the branch automatically. Before merging, review persistence, Android 15/16 notification handling, Shizuku integration, phrase backups, backup privacy XML, exact APK permissions, permanent signing, release boundaries, diagnostics, and translations against \`docs/CURRENT_HANDOFF.md\` and \`docs/FORK_MAINTENANCE.md\`."
+          fi
+
+      - name: Upload merge-conflict report
+        if: steps.merge.outputs.conflict == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: upstream-sync-conflict
+          path: upstream-sync-conflict.md
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Fail visibly on merge conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          BASE_SHA: ${{ steps.merge.outputs.base_sha }}
+          UPSTREAM_SHA: ${{ steps.merge.outputs.upstream_sha }}
+        run: |
+          cat upstream-sync-conflict.md >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Upstream sync conflict::Manual merge required: $BASE_SHA -> $UPSTREAM_SHA. Download the upstream-sync-conflict artifact."
+          exit 1
+
+      - name: Report no upstream change
+        if: steps.merge.outputs.changed == 'false' && steps.merge.outputs.conflict != 'true'
+        run: echo "Upstream main is already contained in fork main." >> "$GITHUB_STEP_SUMMARY"

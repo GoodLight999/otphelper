@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.jd1378.otphelper.R
 import io.github.jd1378.otphelper.ui.components.DangerousActionDialog
 import io.github.jd1378.otphelper.ui.components.NewPhraseDialog
+import io.github.jd1378.otphelper.ui.components.PhraseBackupMenuItems
 import io.github.jd1378.otphelper.ui.components.TitleBar
 import io.github.jd1378.otphelper.ui.components.drawVerticalScrollbar
 import io.github.jd1378.otphelper.utils.Clipboard
@@ -67,19 +68,14 @@ fun SensitivePhrases(
   val phrases by viewModel.sensitivePhrases.collectAsStateWithLifecycle()
   val listState = rememberLazyListState()
   val showResetToDefaultDialog = viewModel.showResetToDefaultDialog.collectAsStateWithLifecycle()
-  val showNewSensitivePhraseDialog =
-      viewModel.showNewSensitivePhraseDialog.collectAsStateWithLifecycle()
+  val showNewSensitivePhraseDialog = viewModel.showNewSensitivePhraseDialog.collectAsStateWithLifecycle()
   val showClearListDialog = viewModel.showClearListDialog.collectAsStateWithLifecycle()
 
   Scaffold(
       modifier = modifier,
       topBar = {
-        TitleBar(
-            upPress = upPress,
-            text = stringResource(R.string.sensitive_phrases),
-        ) {
+        TitleBar(upPress = upPress, text = stringResource(R.string.sensitive_phrases)) {
           var expanded by remember { mutableStateOf(false) }
-
           Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
             IconButton(onClick = { expanded = true }) {
               Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options))
@@ -106,14 +102,22 @@ fun SensitivePhrases(
                   leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
               )
               HorizontalDivider()
+              PhraseBackupMenuItems(
+                  filePrefix = "sensitive-phrases",
+                  dismissMenu = { expanded = false },
+                  exportCurrent = viewModel::exportCurrent,
+                  importCurrent = viewModel::importCurrent,
+                  exportAll = viewModel::exportAll,
+                  importAll = viewModel::importAll,
+              )
+              HorizontalDivider()
               DropdownMenuItem(
                   text = { Text(stringResource(R.string.copy_general_regex)) },
                   onClick = {
                     Clipboard.copyToClipboard(
                         context,
-                        viewModel.autoUpdatingListenerUtils.codeExtractor
-                            ?.generalCodeMatcher
-                            ?.toString() ?: "",
+                        viewModel.autoUpdatingListenerUtils.codeExtractor?.generalCodeMatcher?.toString()
+                            ?: "",
                         false)
                     expanded = false
                   },
@@ -128,9 +132,8 @@ fun SensitivePhrases(
                   onClick = {
                     Clipboard.copyToClipboard(
                         context,
-                        viewModel.autoUpdatingListenerUtils.codeExtractor
-                            ?.specialCodeMatcher
-                            ?.toString() ?: "",
+                        viewModel.autoUpdatingListenerUtils.codeExtractor?.specialCodeMatcher?.toString()
+                            ?: "",
                         false)
                     expanded = false
                   },
@@ -145,9 +148,7 @@ fun SensitivePhrases(
         }
       },
       floatingActionButton = {
-        FloatingActionButton(
-            onClick = { viewModel.showNewSensitivePhraseDialog.value = true },
-        ) {
+        FloatingActionButton(onClick = { viewModel.showNewSensitivePhraseDialog.value = true }) {
           Icon(Icons.Filled.Add, stringResource(R.string.add))
         }
       },
@@ -191,17 +192,16 @@ fun SensitivePhrases(
         append(stringResource(R.string.sensitive_phrases_desc_regex))
         append(" ")
         withStyle(
-            style =
-                SpanStyle(
-                    textDecoration = TextDecoration.Underline,
-                    color = MaterialTheme.colorScheme.primary)) {
-              append(hyperlinkText)
-              addStringAnnotation(
-                  tag = "URL",
-                  annotation = "https://regextutorial.org/",
-                  start = length - hyperlinkText.length,
-                  end = length)
-            }
+            SpanStyle(
+                textDecoration = TextDecoration.Underline,
+                color = MaterialTheme.colorScheme.primary)) {
+          append(hyperlinkText)
+          addStringAnnotation(
+              tag = "URL",
+              annotation = "https://regextutorial.org/",
+              start = length - hyperlinkText.length,
+              end = length)
+        }
       }
 
       ClickableText(
@@ -210,13 +210,12 @@ fun SensitivePhrases(
             annotatedString
                 .getStringAnnotations(tag = "URL", start = offset, end = offset)
                 .firstOrNull()
-                ?.let { annotation -> uriHandler.openUriSafely(context, annotation.item) }
+                ?.let { uriHandler.openUriSafely(context, it.item) }
           },
           modifier = Modifier.fillMaxWidth(),
       )
 
       HorizontalDivider(Modifier.padding(top = dimensionResource(R.dimen.padding_page)))
-
       Box(
           modifier =
               Modifier.fillMaxSize()

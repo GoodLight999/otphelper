@@ -22,74 +22,80 @@ import io.github.jd1378.otphelper.di.DETECTION_TIMEOUT_MS
 import io.github.jd1378.otphelper.di.RecentDetectedCodesHolder
 import io.github.jd1378.otphelper.di.RecentDetectedMessageHolder
 import io.github.jd1378.otphelper.utils.AppLogger
+import io.github.jd1378.otphelper.utils.MonitoringHealthStore
+import io.github.jd1378.otphelper.utils.NotificationCodeSelector
 import io.github.jd1378.otphelper.worker.CodeDetectedWorker
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class NotificationListener : NotificationListenerService() {
 
-  @Inject
-  lateinit var autoUpdatingListenerUtils: AutoUpdatingListenerUtils
-
-  @Inject
-  lateinit var recentDetectedMessageHolder: RecentDetectedMessageHolder
-
-  @Inject
-  lateinit var recentDetectedCodesHolder: RecentDetectedCodesHolder
+  @Inject lateinit var autoUpdatingListenerUtils: AutoUpdatingListenerUtils
+  @Inject lateinit var recentDetectedMessageHolder: RecentDetectedMessageHolder
+  @Inject lateinit var recentDetectedCodesHolder: RecentDetectedCodesHolder
 
   companion object {
-    val TAG = "NotificationListener"
+    const val TAG = "NotificationListener"
     private val redactedNotificationMessages =
         mutableSetOf(
-            "Sensitive notification content hidden", // en
-            "محتوای اعلان حساس پنهان شده است", // fa
-            "تم إخفاء المحتوى الحساس في الإشعار", // ar
-            "已隐藏敏感通知内容", // b+zh+Hans
-            "系統已隱藏含有私密資訊的通知內容", // b+zh+Hant
-            "Деликатното съдържание в известието е скрито", // bg
-            "S'ha amagat contingut sensible de les notificacions", // ca
-            "Vertrauliche Benachrichtigungsinhalte ausgeblendet", // de
-            "Contenido sensible de la notificación oculto", // es
-            "Märguande delikaatne sisu peideti", // et
-            "Le contenu sensible de la notification a été masqué", // fr
-            "संवेदनशील जानकारी वाली सूचना का कॉन्टेंट छिपा है", // hi
-            "Contenuti sensibili della notifica nascosti", // it
-            "יש תוכן רגיש בהתראה שהוסתר", // iw
-            "プライベートな通知内容は表示されません", // ja
-            "민감한 알림 콘텐츠 숨김", // ko
-            "Treść poufnego powiadomienia została ukryta", // pl
-            "Conteúdo de notificação sensível oculto", // pt
-            "Conținutul sensibil din notificări a fost ascuns", // ro
-            "Конфиденциальная информация в уведомлении скрыта", // ru
-            "உணர்வுபூர்வமான அறிவிப்பு உள்ளடக்கம் மறைக்கப்பட்டது", // ta
-            "Hassas bildirim içerikleri gizlendi", // tr
-            "Чутливий вміст сповіщення приховано", // uk
-            "Đã ẩn nội dung thông báo nhạy cảm", // vi
+            "Sensitive notification content hidden",
+            "محتوای اعلان حساس پنهان شده است",
+            "تم إخفاء المحتوى الحساس في الإشعار",
+            "已隐藏敏感通知内容",
+            "系統已隱藏含有私密資訊的通知內容",
+            "Деликатното съдържание в известието е скрито",
+            "S'ha amagat contingut sensible de les notificacions",
+            "Vertrauliche Benachrichtigungsinhalte ausgeblendet",
+            "Contenido sensible de la notificación oculto",
+            "Märguande delikaatne sisu peideti",
+            "Le contenu sensible de la notification a été masqué",
+            "संवेदनशील जानकारी वाली सूचना का कॉन्टेंट छिपा है",
+            "Contenuti sensibili della notifica nascosti",
+            "יש תוכן רגיש בהתראה שהוסתר",
+            "プライベートな通知内容は表示されません",
+            "민감한 알림 콘텐츠 숨김",
+            "Treść poufnego powiadomienia została ukryta",
+            "Conteúdo de notificação sensível oculto",
+            "Conținutul sensibil din notificări a fost ascuns",
+            "Конфиденциальная информация в уведомлении скрыта",
+            "உணர்வுபூர்வமான அறிவிப்பு உள்ளடக்கம் மறைக்கப்பட்டது",
+            "Hassas bildirim içerikleri gizlendi",
+            "Чутливий вміст сповіщення приховано",
+            "Đã ẩn nội dung thông báo nhạy cảm",
         )
 
-    val notification_text_keys =
+    val notificationTextKeys =
         listOf(
-            // Notification.EXTRA_TITLE, // removed due to causing false positives.
+            Notification.EXTRA_TITLE,
+            Notification.EXTRA_TITLE_BIG,
             Notification.EXTRA_TEXT,
             Notification.EXTRA_SUB_TEXT,
             Notification.EXTRA_INFO_TEXT,
             Notification.EXTRA_SUMMARY_TEXT,
             Notification.EXTRA_BIG_TEXT,
-            Notification.EXTRA_TEXT_LINES,
         )
-    val notification_text_arrays_keys = listOf(Notification.EXTRA_TEXT_LINES)
 
-    fun isNotificationListenerServiceEnabled(context: Context): Boolean {
-      return NotificationManagerCompat.getEnabledListenerPackages(context)
-          .contains(context.packageName)
-    }
+    // Cross-line OTP inference deliberately excludes title fields. Messaging apps commonly place a
+    // sender short code, conversation ID, order number, or phone number in EXTRA_TITLE. Those values
+    // may still be detected when the title itself contains authentication wording, but they cannot
+    // borrow an OTP phrase from a different body field.
+    private val notificationBodyTextKeys =
+        listOf(
+            Notification.EXTRA_TEXT,
+            Notification.EXTRA_SUB_TEXT,
+            Notification.EXTRA_INFO_TEXT,
+            Notification.EXTRA_SUMMARY_TEXT,
+            Notification.EXTRA_BIG_TEXT,
+        )
+
+    val notificationTextArrayKeys = listOf(Notification.EXTRA_TEXT_LINES)
+
+    fun isNotificationListenerServiceEnabled(context: Context): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 
     fun enable(context: Context) {
       context.packageManager.setComponentEnabledSetting(
-          ComponentName(
-              context,
-              NotificationListener::class.java,
-          ),
+          ComponentName(context, NotificationListener::class.java),
           PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
           PackageManager.DONT_KILL_APP,
       )
@@ -97,38 +103,45 @@ class NotificationListener : NotificationListenerService() {
 
     fun disable(context: Context) {
       context.packageManager.setComponentEnabledSetting(
-          ComponentName(
-              context,
-              NotificationListener::class.java,
-          ),
+          ComponentName(context, NotificationListener::class.java),
           PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
           PackageManager.DONT_KILL_APP,
       )
     }
 
-    @SuppressLint("DiscouragedApi")
-    private fun hasRedactedMessage(
-      notif: Notification,
-    ): Boolean {
-      try {
-        // we do this every time because system language can be changed at any point in time
-        // if we cache it, it can result in incorrect behavior
-        val resId =
-            Resources.getSystem()
-                .getIdentifier("redacted_notification_message", "string", "android")
-        val res = Resources.getSystem().getString(resId)
-        if (res.isNotBlank()) {
-          // just in case future android versions change the message
-          redactedNotificationMessages.add(res)
+    fun extractNotificationText(notification: Notification): String =
+        extractNotificationText(notification, notificationTextKeys)
+
+    fun extractNotificationBodyText(notification: Notification): String =
+        extractNotificationText(notification, notificationBodyTextKeys)
+
+    private fun extractNotificationText(notification: Notification, textKeys: List<String>): String {
+      val extras = notification.extras
+      return buildString {
+        for (key in textKeys) {
+          extras.getCharSequence(key)?.toString()?.takeIf { it.isNotEmpty() }?.let {
+            append(it).append('\n')
+          }
         }
-      } catch (e: Throwable) {
-        // this is just in case the above api stops working in future versions
+        for (key in notificationTextArrayKeys) {
+          extras.getCharSequenceArray(key)?.forEach { value ->
+            if (!value.isNullOrBlank()) append(value).append('\n')
+          }
+        }
       }
-      // Check redacted strings
+    }
+
+    @SuppressLint("DiscouragedApi")
+    private fun hasRedactedMessage(notif: Notification): Boolean {
+      try {
+        val resId =
+            Resources.getSystem().getIdentifier("redacted_notification_message", "string", "android")
+        val res = Resources.getSystem().getString(resId)
+        if (res.isNotBlank()) redactedNotificationMessages.add(res)
+      } catch (_: Throwable) {}
       notif.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.let { str ->
         if (redactedNotificationMessages.contains(str)) return true
       }
-
       return false
     }
   }
@@ -141,213 +154,127 @@ class NotificationListener : NotificationListenerService() {
 
   override fun onListenerConnected() {
     super.onListenerConnected()
+    MonitoringHealthStore.markListenerConnected(applicationContext, true)
     AppLogger.i(TAG, "onListenerConnected")
+    PersistenceService.start(applicationContext)
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
     super.onNotificationPosted(sbn)
-    autoUpdatingListenerUtils.awaitCodeExtractor()
-    if (autoUpdatingListenerUtils.modeOfOperation != ModeOfOperation.Notification &&
-      !autoUpdatingListenerUtils.isAutoDismissEnabled &&
-      !autoUpdatingListenerUtils.isAutoMarkAsReadEnabled) {
+    if (sbn == null) return
+
+    AppLogger.d(TAG, "onNotificationPosted: pkg=${sbn.packageName}, id=${sbn.id}")
+    val notification = sbn.notification
+    val rawNotificationText = extractNotificationText(notification)
+    val rawNotificationBodyText = extractNotificationBodyText(notification)
+
+    if (!autoUpdatingListenerUtils.awaitCodeExtractor()) return
+    val listenerSettings = autoUpdatingListenerUtils.current()
+    if (listenerSettings.modeOfOperation != ModeOfOperation.Notification &&
+        !listenerSettings.isAutoDismissEnabled &&
+        !listenerSettings.isAutoMarkAsReadEnabled) {
       return
     }
-    if (sbn != null) {
-      AppLogger.d(TAG, "onNotificationPosted: pkg=${sbn.packageName}, id=${sbn.id}")
-      if (sbn.packageName == BuildConfig.APPLICATION_ID && sbn.id == R.id.code_detected_notify_id)
-        return
 
-      val mNotification = sbn.notification
-      // ignore notifications that are foreground service
-      val isForegroundService = (mNotification.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0
-      val isOngoing = (mNotification.flags and Notification.FLAG_ONGOING_EVENT) != 0
+    if (sbn.packageName == BuildConfig.APPLICATION_ID && sbn.id == R.id.code_detected_notify_id) {
+      return
+    }
 
-      if (isForegroundService || isOngoing) {
-        AppLogger.d(
-            TAG,
-            "skipping: foregroundService=$isForegroundService, ongoing=$isOngoing",
-        )
-        return
-      }
+    val isForegroundService = (notification.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0
+    val isOngoing = (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0
+    if (isForegroundService || isOngoing) {
+      AppLogger.d(TAG, "skipping: foregroundService=$isForegroundService, ongoing=$isOngoing")
+      return
+    }
 
-      var codeDetected = false
-
-      if (autoUpdatingListenerUtils.modeOfOperation == ModeOfOperation.Notification) {
-        val codeExtractor = autoUpdatingListenerUtils.codeExtractor!!
-
-        val extras = mNotification.extras
-        val notifyTexts = StringBuilder()
-        for (key in notification_text_keys) {
-          val str = extras.getCharSequence(key)?.toString()
-          if (!str.isNullOrEmpty()) {
-            notifyTexts.append(str)
-            notifyTexts.append("\n")
-          }
-        }
-        for (key in notification_text_arrays_keys) {
-          val array = extras.getCharSequenceArray(key)
-          if (array != null) {
-            for (charSeq in array) {
-              notifyTexts.append(charSeq.toString())
-              notifyTexts.append("\n")
-            }
-          }
-        }
-        val notifyText = notifyTexts.toString()
-        if (codeExtractor.shouldIgnore(notifyText)) {
-          AppLogger.d(TAG, "notification ignored by ignore phrases, pkg=${sbn.packageName}")
-          return
-        }
-        val notificationText = codeExtractor.cleanup(notifyText)
-
-        if (notificationText.isNotEmpty()) {
-          val code = codeExtractor.getCode(notificationText, false) // to not do it more than once
-          if (code.isNullOrEmpty()) {
-            AppLogger.d(TAG, "no code found in notification, pkg=${sbn.packageName}")
-          } else {
-            // mark detected so post-detection actions (dismiss / mark as read) still apply to
-            // every notification instance, even reposted duplicates
-            codeDetected = true
-            // some apps repost the same notification with a new id within seconds; dedupe on the
-            // stable content so we record / copy / toast the code only once. see issue #217
-            val signature = "${sbn.packageName}|${code}|${notificationText}"
-            if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) {
-              AppLogger.d(TAG, "code detected but duplicate, skipping enqueue, pkg=${sbn.packageName}")
-            } else {
-              AppLogger.i(
-                  TAG,
-                  "code detected in notification, enqueueing CodeDetectedWorker, " +
-                      "pkg=${sbn.packageName}",
-              )
-              val data: Data
+    var codeDetected = false
+    if (listenerSettings.modeOfOperation == ModeOfOperation.Notification) {
+      val codeExtractor = listenerSettings.codeExtractor ?: return
+      val notificationText = codeExtractor.cleanup(rawNotificationText)
+      val code =
+          NotificationCodeSelector.selectCode(
+              rawNotificationText,
+              codeExtractor,
+              rawNotificationBodyText,
+          )
+      if (code.isNullOrEmpty()) {
+        AppLogger.d(TAG, "no code found in notification, pkg=${sbn.packageName}")
+      } else {
+        codeDetected = true
+        val signature = RecentDetectedCodesHolder.signature(sbn.packageName, code)
+        if (recentDetectedCodesHolder.isDuplicate(signature, System.currentTimeMillis())) {
+          AppLogger.d(TAG, "code detected but duplicate, skipping enqueue, pkg=${sbn.packageName}")
+        } else {
+          AppLogger.i(TAG, "code detected in notification, enqueueing worker, pkg=${sbn.packageName}")
+          val data: Data =
               try {
-                data =
-                    workDataOf(
-                        "packageName" to sbn.packageName,
-                        "notificationId" to sbn.id.toString(),
-                        "notificationTag" to sbn.tag,
-                        "text" to notificationText,
-                        "code" to code,
-                    )
-              } catch (e: Throwable) {
-                AppLogger.e(TAG, "Notification too large to check, skipping it...", e)
+                workDataOf(
+                    "packageName" to sbn.packageName,
+                    "notificationId" to sbn.id.toString(),
+                    "notificationTag" to sbn.tag,
+                    "text" to notificationText,
+                    "code" to code,
+                )
+              } catch (error: Throwable) {
+                AppLogger.e(TAG, "Notification too large to enqueue", error)
                 return
               }
-              val work = OneTimeWorkRequestBuilder<CodeDetectedWorker>().setInputData(data).build()
-              WorkManager.getInstance(applicationContext).enqueue(work)
-            }
-          }
-        }
-      } else {
-        val message = synchronized(DETECTION_LOCK) { recentDetectedMessageHolder.message }
-        // sms mode and have detected message recently
-        if (message != null) {
-          if (System.currentTimeMillis() - message.timestamp <= DETECTION_TIMEOUT_MS) {
-            // fast detection path: We simply get the normal text of notification and check for
-            // access
-            // denial text, which means this notification is a sensitive notification
-            // so we cannot check further because of restrictions of android 15+, but we it's likely
-            // to be the notification we want
-            //
-            // slow detection path:
-            // we try to find the message in the notification text partially, if found, it is the
-            // notification we are looking for. we do this lazily and based on what is more likely
-            // to
-            // contain the target text.
-            // we only take 25 characters from the message since it should be more than enough to
-            // identify the notification
-            //
-            // when found, we set codeDetected to true and apply the post detection actions to the
-            // notification
-
-            // we just need to check Notification.EXTRA_TEXT for redacted message at first
-            codeDetected = hasRedactedMessage(mNotification)
-
-            if (!codeDetected) {
-              // now we check if we can see the recent message we have inside the notification texts
-              val extras = mNotification.extras
-              for (key in notification_text_keys) {
-                val str = extras.getCharSequence(key)?.toString()
-                if (!str.isNullOrBlank() && str.contains(message.body)) {
-                  codeDetected = true
-                  break
-                }
-              }
-              if (!codeDetected) {
-                for (key in notification_text_arrays_keys) {
-                  val array = extras.getCharSequenceArray(key)
-                  if (array != null) {
-                    for (charSeq in array) {
-                      if (!charSeq.isNullOrBlank() && charSeq.contains(message.body)) {
-                        codeDetected = true
-                        break
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          } else {
-            // we don't need to check if the detection is too old now
-            return
-          }
+          WorkManager.getInstance(applicationContext)
+              .enqueue(OneTimeWorkRequestBuilder<CodeDetectedWorker>().setInputData(data).build())
         }
       }
+    } else {
+      val message = synchronized(DETECTION_LOCK) { recentDetectedMessageHolder.message }
+      if (message != null) {
+        if (System.currentTimeMillis() - message.timestamp > DETECTION_TIMEOUT_MS) return
+        codeDetected = hasRedactedMessage(notification) || rawNotificationText.contains(message.body)
+      }
+    }
 
-      if (codeDetected) {
-        AppLogger.i(
-            TAG,
-            "post-detection actions: autoMarkAsRead=" +
-                "${autoUpdatingListenerUtils.isAutoMarkAsReadEnabled}, autoDismiss=" +
-                "${autoUpdatingListenerUtils.isAutoDismissEnabled}, pkg=${sbn.packageName}",
-        )
-        if (autoUpdatingListenerUtils.isAutoMarkAsReadEnabled) {
-          val actions = mNotification.actions
-          if (actions != null) {
-            for (action in mNotification.actions) {
-              val isReadAction =
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-                    action.semanticAction == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ) {
-                    true
-                  } else {
-                    val title = action.title.toString().lowercase()
-                    title.contains("mark") && title.contains("read")
-                  }
-              if (isReadAction) {
-                try {
-                  action.actionIntent.send()
-                } catch (e: Throwable) {
-                  AppLogger.d(TAG, "failed to use notification action '${action.title}'")
-                }
-              }
+    if (!codeDetected) return
+    AppLogger.i(
+        TAG,
+        "post-detection actions: autoMarkAsRead=${listenerSettings.isAutoMarkAsReadEnabled}, " +
+            "autoDismiss=${listenerSettings.isAutoDismissEnabled}, pkg=${sbn.packageName}",
+    )
+    if (listenerSettings.isAutoMarkAsReadEnabled) {
+      notification.actions?.forEach { action ->
+        val isReadAction =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                action.semanticAction == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ) {
+              true
+            } else {
+              val title = action.title.toString().lowercase()
+              title.contains("mark") && title.contains("read")
             }
+        if (isReadAction) {
+          try {
+            action.actionIntent.send()
+          } catch (_: Throwable) {
+            AppLogger.d(TAG, "failed to use notification action '${action.title}'")
           }
-        }
-
-        if (autoUpdatingListenerUtils.isAutoDismissEnabled) {
-          cancelNotification(sbn.key)
-        }
-        synchronized(DETECTION_LOCK) {
-          recentDetectedMessageHolder.message = null // cleanup the sensitive data from memory
         }
       }
     }
+    if (listenerSettings.isAutoDismissEnabled) cancelNotification(sbn.key)
+    synchronized(DETECTION_LOCK) { recentDetectedMessageHolder.message = null }
   }
 
   override fun onListenerDisconnected() {
     super.onListenerDisconnected()
-
-    // Handle the listener disconnected event
-    AppLogger.i(TAG, "Notification listener disconnected.")
-
+    MonitoringHealthStore.markListenerConnected(applicationContext, false)
+    AppLogger.w(TAG, "Notification listener disconnected")
+    PersistenceService.start(applicationContext)
     if (isNotificationListenerServiceEnabled(applicationContext)) {
-      AppLogger.d(TAG, "Rebinding to the service")
-      val componentName =
-          ComponentName(
-              this,
-              NotificationListener::class.java,
-          )
-      requestRebind(componentName)
+      AppLogger.i(TAG, "Notification permission remains enabled; requesting immediate rebind")
+      requestRebind(ComponentName(this, NotificationListener::class.java))
     }
+  }
+
+  override fun onDestroy() {
+    MonitoringHealthStore.markListenerConnected(applicationContext, false)
+    AppLogger.w(TAG, "Notification listener destroyed")
+    PersistenceService.scheduleRestart(applicationContext)
+    super.onDestroy()
   }
 }

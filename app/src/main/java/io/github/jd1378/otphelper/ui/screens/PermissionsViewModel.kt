@@ -13,25 +13,38 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jd1378.otphelper.AccessibilityNotificationService
+import io.github.jd1378.otphelper.INTENT_ACTION_SHIZUKU_REPAIR
+import io.github.jd1378.otphelper.InternalActionActivity
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.MyWorkManager
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.ui.navigation.MainDestinations
 import io.github.jd1378.otphelper.utils.AutostartHelper
+import io.github.jd1378.otphelper.utils.DiagnosticsReportManager
 import io.github.jd1378.otphelper.utils.SettingsHelper
+import io.github.jd1378.otphelper.utils.ShizukuConnectionManager
+import io.github.jd1378.otphelper.utils.ShizukuConnectionSnapshot
 import io.github.jd1378.otphelper.utils.combine
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Immutable
 data class PermissionsUiState(
     val hasNotifPerm: Boolean = false,
     val hasNotifListenerPerm: Boolean = false,
+    val hasAccessibilityNotificationService: Boolean = false,
+    val shizukuManagerInstalled: Boolean = false,
+    val shizukuBinderAlive: Boolean = false,
+    val shizukuPermission: String = "unavailable",
     val hasSmsListenerPerm: Boolean = false,
     val hasReadSmsPerm: Boolean = false,
     val isIgnoringBatteryOptimizations: Boolean = false,
@@ -40,6 +53,12 @@ data class PermissionsUiState(
     val showSkipWarning: Boolean = false,
     val hasDoneAllSteps: Boolean = false,
     val modeOfOperation: ModeOfOperation = ModeOfOperation.UNRECOGNIZED,
+)
+
+private data class NotificationSupportState(
+    val listenerEnabled: Boolean,
+    val accessibilityEnabled: Boolean,
+    val shizuku: ShizukuConnectionSnapshot,
 )
 
 @Stable
@@ -53,6 +72,25 @@ constructor(
 
   private val _hasNotifPerm = MutableStateFlow(false)
   private val _hasNotifListenerPerm = MutableStateFlow(false)
+  private val _hasAccessibilityNotificationService = MutableStateFlow(false)
+  private val _shizukuSnapshot =
+      MutableStateFlow(
+          ShizukuConnectionSnapshot(
+              managerInstalled = false,
+              binderAlive = false,
+              binderEverReceived = false,
+              serverVersion = null,
+              serverUid = null,
+              permission = "unavailable",
+          ))
+  private val notificationSupportState =
+      combine(
+          _hasNotifListenerPerm,
+          _hasAccessibilityNotificationService,
+          _shizukuSnapshot,
+      ) { listener, accessibility, shizuku ->
+        NotificationSupportState(listener, accessibility, shizuku)
+      }
   private val _hasSmsListenerPerm = MutableStateFlow(false)
   private val _hasReadSmsPerm = MutableStateFlow(false)
   private val _isIgnoringBatteryOptimizations = MutableStateFlow(false)
@@ -64,7 +102,7 @@ constructor(
       combine(
               userSettingsRepository.userSettings,
               _hasNotifPerm,
-              _hasNotifListenerPerm,
+              notificationSupportState,
               _hasSmsListenerPerm,
               _hasReadSmsPerm,
               _isIgnoringBatteryOptimizations,
@@ -74,7 +112,7 @@ constructor(
           ) {
               userSettings,
               hasNotifPerm,
-              hasNotifListenerPerm,
+              support,
               hasSmsListenerPerm,
               hasReadSmsPerm,
               isIgnoringBatteryOptimizations,
@@ -83,13 +121,17 @@ constructor(
               showSkipWarning ->
             val hasDoneAllSteps =
                 when (userSettings.modeOfOperation) {
-                  ModeOfOperation.Notification -> hasNotifPerm && hasNotifListenerPerm
+                  ModeOfOperation.Notification -> hasNotifPerm && support.listenerEnabled
                   ModeOfOperation.SMS -> hasReadSmsPerm && hasSmsListenerPerm
                   else -> false
                 }
             PermissionsUiState(
                 hasNotifPerm,
-                hasNotifListenerPerm,
+                support.listenerEnabled,
+                support.accessibilityEnabled,
+                support.shizuku.managerInstalled,
+                support.shizuku.binderAlive,
+                support.shizuku.permission,
                 hasSmsListenerPerm,
                 hasReadSmsPerm,
                 isIgnoringBatteryOptimizations,
@@ -118,9 +160,18 @@ constructor(
         }
       }
       launch {
-        _hasNotifListenerPerm.update {
-          NotificationManagerCompat.getEnabledListenerPackages(context)
-              .contains(context.packageName)
+        val enabled =
+            NotificationManagerCompat.getEnabledListenerPackages(context)
+                .contains(context.packageName)
+        val wasEnabled = _hasNotifListenerPerm.value
+        _hasNotifListenerPerm.value = enabled
+        if (enabled && !wasEnabled) {
+          MyWorkManager.rebindListeners(context, true)
+        }
+      }
+      launch {
+        _hasAccessibilityNotificationService.update {
+          AccessibilityNotificationService.isEnabled(context)
         }
       }
       launch {
@@ -149,7 +200,12 @@ constructor(
         }
       }
     }
-    MyWorkManager.rebindListeners(context, true)
+  }
+
+  fun updateAdvancedRecoveryStatus(context: Context) {
+    viewModelScope.launch {
+      _shizukuSnapshot.value = ShizukuConnectionManager.snapshot(context.applicationContext)
+    }
   }
 
   fun onSetupFinish(onNavigateToRoute: (String, Boolean, Boolean) -> Unit) {
@@ -168,10 +224,27 @@ constructor(
     SettingsHelper.openNotificationListenerSettings(context)
   }
 
+  fun onOpenAccessibilityPressed(context: Context) {
+    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+  }
+
+  fun onRunShizukuRepair(context: Context) {
+    context.startActivity(
+        Intent(context, InternalActionActivity::class.java)
+            .setAction(INTENT_ACTION_SHIZUKU_REPAIR)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    )
+  }
+
   fun onOpenBatteryOptimizationsPressed(context: Context) {
     val intent = Intent().setAction(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
     context.startActivity(intent)
   }
+
+  suspend fun buildDiagnostics(context: Context): String =
+      withContext(Dispatchers.IO) {
+        DiagnosticsReportManager.build(context, userSettingsRepository.fetchSettings())
+      }
 
   fun onOpenAutostartPressed(context: Context) {
     AutostartHelper.openAutostartSettings(context)

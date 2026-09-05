@@ -1,19 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Preserve user settings and phrase lists, but never cloud-back up or device-transfer the Room OTP
+  history database. Declaring an include switches each transfer mode from Android's default of
+  almost-all app data to this explicit allowlist.
 -->
 <data-extraction-rules>
-    <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
-    </cloud-backup>
-    <!--
-    <device-transfer>
-        <include .../>
-        <exclude .../>
-    </device-transfer>
-    -->
+  <cloud-backup disableIfNoEncryptionCapabilities="true">
+    <include
+        domain="file"
+        path="datastore/." />
+  </cloud-backup>
+  <device-transfer>
+    <include
+        domain="file"
+        path="datastore/." />
+  </device-transfer>
 </data-extraction-rules>
