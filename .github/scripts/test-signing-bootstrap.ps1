@@ -173,4 +173,83 @@ if (Test-Path -LiteralPath $unexpectedLegacySecret -PathType Leaf) {
     throw 'Certificate identity must be repository-pinned, not transported as a mutable Secret.'
 }
 
-Write-Host 'Signing bootstrap verified: JKS, certificate, repository-pin verifier, Base64, and exact four-Secret transport.'
+# Exercise the post-bootstrap path that operators actually use now that the permanent identity
+# already exists. First prove that a JKS that does not match the committed production pin is refused
+# before any Secret write. Then temporarily substitute the throwaway pin inside this isolated CI
+# checkout and prove exact four-Secret transport on the success path. The original pin is restored in
+# a finally block before any later CI verification can observe the test value.
+$repositoryPin = Join-Path $PSScriptRoot '..' 'signing' 'otphelper-cert-sha256.txt'
+$productionPinBytes = [System.IO.File]::ReadAllBytes($repositoryPin)
+Get-ChildItem -LiteralPath $captureDirectory -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+
+$env:PATH = "$fakeGhDirectory$([System.IO.Path]::PathSeparator)$originalPath"
+$env:OTPHELPER_TEST_SIGNING_PASSWORD = $testPassword
+$env:OTPHELPER_FAKE_GH_CAPTURE = $captureDirectory
+try {
+    $mismatchRejected = $false
+    try {
+        ./tools/configure-otphelper-signing-secrets.ps1 `
+            -KeystorePath $keystore `
+            -PasswordEnvironmentVariable OTPHELPER_TEST_SIGNING_PASSWORD `
+            -Repository GoodLight999/otphelper `
+            -ConfirmConfigure
+    }
+    catch {
+        $mismatchRejected = $_.Exception.Message -like '*not the repository-pinned signer*'
+        if (-not $mismatchRejected) {
+            throw
+        }
+    }
+    if (-not $mismatchRejected) {
+        throw 'Existing-signer configurator accepted a JKS that does not match the production pin.'
+    }
+    if (@(Get-ChildItem -LiteralPath $captureDirectory -File -ErrorAction SilentlyContinue).Count -ne 0) {
+        throw 'Existing-signer configurator wrote a Secret before rejecting a mismatched JKS.'
+    }
+
+    [System.IO.File]::WriteAllText(
+        $repositoryPin,
+        $fingerprint,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+
+    ./tools/configure-otphelper-signing-secrets.ps1 `
+        -KeystorePath $keystore `
+        -PasswordEnvironmentVariable OTPHELPER_TEST_SIGNING_PASSWORD `
+        -Repository GoodLight999/otphelper `
+        -ConfirmConfigure
+}
+finally {
+    [System.IO.File]::WriteAllBytes($repositoryPin, $productionPinBytes)
+    $env:PATH = $originalPath
+    Remove-Item Env:OTPHELPER_TEST_SIGNING_PASSWORD -ErrorAction SilentlyContinue
+    Remove-Item Env:OTPHELPER_FAKE_GH_CAPTURE -ErrorAction SilentlyContinue
+}
+
+foreach ($entry in $expectedSecrets.GetEnumerator()) {
+    $valuePath = Join-Path $captureDirectory "$($entry.Key).value"
+    $repositoryPath = Join-Path $captureDirectory "$($entry.Key).repository"
+    if (-not (Test-Path -LiteralPath $valuePath -PathType Leaf)) {
+        throw "Existing-signer configurator did not send Secret $($entry.Key)."
+    }
+    $actualBytes = [System.IO.File]::ReadAllBytes($valuePath)
+    $expectedBytes = [System.Text.Encoding]::UTF8.GetBytes([string]$entry.Value)
+    if (
+        $actualBytes.Length -ne $expectedBytes.Length -or
+        [Convert]::ToBase64String($actualBytes) -cne [Convert]::ToBase64String($expectedBytes)
+    ) {
+        throw "Existing-signer Secret $($entry.Key) changed in transit or gained a trailing newline."
+    }
+    if ([System.IO.File]::ReadAllText($repositoryPath) -cne 'GoodLight999/otphelper') {
+        throw "Existing-signer Secret $($entry.Key) was sent to the wrong repository."
+    }
+}
+if (Test-Path -LiteralPath $unexpectedLegacySecret -PathType Leaf) {
+    throw 'Existing-signer configurator must not transport the certificate fingerprint as a Secret.'
+}
+if ((Get-Content -LiteralPath $repositoryPin -Raw).Trim().ToLowerInvariant() -eq $fingerprint) {
+    throw 'Signing contract test failed to restore the production repository pin.'
+}
+
+Write-Host 'Signing bootstrap and existing-signer configuration verified: pin rejection, JKS, certificate, Base64, and exact four-Secret transport.'
