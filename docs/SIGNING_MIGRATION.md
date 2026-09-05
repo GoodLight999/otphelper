@@ -33,7 +33,7 @@ Exactly four repository Secrets carry the private signing material:
 
 The certificate SHA-256 is intentionally **not** a mutable Secret. Both pre-build JKS verification and post-build APK verification read the public repository pin above. A legacy `OTPHELPER_SIGNING_CERT_SHA256` environment value, if supplied by an old local script, is accepted only when it exactly equals the repository pin and can never override it.
 
-GitHub repository Secrets are configured under **Settings → Secrets and variables → Actions**, or with `gh secret set`. Never commit the JKS, its Base64 form, or passwords.
+GitHub repository Secrets are configured under **Settings → Secrets and variables → Actions**, or with the guarded helper documented below. Never commit the JKS, its Base64 form, or passwords.
 
 ## Private-key continuity
 
@@ -68,28 +68,39 @@ pwsh ./tools/otphelper-adb-migration.ps1 `
 
 Require `app-data.tar`, `metadata.json`, and `package-dump.txt`, then keep an independent copy before proceeding.
 
-## Phase 2 — ensure the existing permanent key is in GitHub Secrets
+## Phase 2 — install the existing permanent key and verify CI
 
-Do **not** run the key generator for this repository now. Install/restore the four existing permanent-key Secret values listed above.
+Do **not** run the key generator for this repository. From an authenticated operator environment containing an existing backup of the permanent JKS, use the guarded configurator and trigger the fixed-signing verification run in the same command:
 
-Before touching the phone, run CI on `agent/magicos-resilience-and-backup` and require:
+```powershell
+pwsh ./tools/configure-otphelper-signing-secrets.ps1 `
+  -KeystorePath '<private-path-to-existing-jks>' `
+  -TriggerVerificationWorkflow `
+  -ConfirmConfigure
+```
+
+Before writing any Secret, the helper exports the JKS certificate and requires it to match the repository pin. A mismatch aborts before any Secret write or CI dispatch. On success it writes exactly the four private signing Secrets, then dispatches ordinary Android CI on `agent/magicos-resilience-and-backup`; it does not publish a release.
+
+Before touching the phone, require the dispatched run to prove all of the following:
 
 1. static/unit/lint/build checks pass;
 2. Android API 35 and API 36 emulator jobs pass;
-3. permanent-keystore verification runs rather than skips;
-4. post-build APK certificate verification runs rather than skips;
-5. every distributed APK reports certificate SHA-256 `6f8ad841a7c0aa63a05f6efdb204a20881b4aebee2fee0834c80f84aa6a7b8a9`.
+3. `Verify fixed signing keystore` runs rather than skips;
+4. `Verify fixed signing certificate` runs rather than skips;
+5. `Upload fixed-signed installable APKs` runs rather than skips and produces `otphelper-magic-os-fixed-signed-apks`;
+6. every distributable APK reports certificate SHA-256 `6f8ad841a7c0aa63a05f6efdb204a20881b4aebee2fee0834c80f84aa6a7b8a9`.
 
-If signing Secrets are absent, CI may use a disposable key only for non-distributable validation. It must refuse to publish that APK as an installable release artifact.
+If signing Secrets are absent, ordinary CI may use a disposable key only for non-distributable validation. It must refuse to publish that APK as an installable artifact.
 
 ## Phase 3 — replace the old-signature APK once
 
 Only after the backup and fixed-signer CI checks succeed:
 
-1. uninstall the old-signature APK;
-2. install the permanent-signed **normal debug** APK;
-3. launch it once if Android requires this before `run-as` works;
-4. restore with the pinned permanent fingerprint:
+1. download the permanent-signed **normal debug** APK from the verified `otphelper-magic-os-fixed-signed-apks` workflow artifact;
+2. uninstall the old-signature APK;
+3. install the permanent-signed normal debug APK;
+4. launch it once if Android requires this before `run-as` works;
+5. restore with the pinned permanent fingerprint:
 
 ```powershell
 pwsh ./tools/otphelper-adb-migration.ps1 `
