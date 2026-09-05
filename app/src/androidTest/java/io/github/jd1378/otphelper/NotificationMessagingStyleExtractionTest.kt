@@ -1,5 +1,6 @@
 package io.github.jd1378.otphelper
 
+import android.app.Notification
 import android.content.Context
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
@@ -16,7 +17,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NotificationMessagingStyleExtractionTest {
   @Test
-  fun currentMessagingStyleMessagesAreBodyTextAndNewestOtpWins() {
+  fun latestMessagingStyleMessageIsBodyFallbackWithoutReplayingOlderOtp() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val user = Person.Builder().setName("OTP Helper test user").build()
     val sender = Person.Builder().setName("Example service").build()
@@ -48,17 +49,22 @@ class NotificationMessagingStyleExtractionTest {
             .setStyle(style)
             .build()
 
+    // Simulate a source/OEM that leaves the structured MessagingStyle data available but does not
+    // provide a useful flattened message body. The fallback must therefore come from EXTRA_MESSAGES
+    // through NotificationCompat.MessagingStyle rather than from EXTRA_TEXT.
+    notification.extras.remove(Notification.EXTRA_TEXT)
+    notification.extras.remove(Notification.EXTRA_BIG_TEXT)
+    notification.extras.remove(Notification.EXTRA_TEXT_LINES)
+
     val completeText = NotificationListener.extractNotificationText(notification)
     val bodyText = NotificationListener.extractNotificationBodyText(notification)
 
-    // Conversation/title metadata stays out of the cross-line body representation.
+    // Conversation/title metadata stays out of cross-line body inference. Only the latest current
+    // MessagingStyle message is added as fallback, so an expired older OTP is not replayed when the
+    // conversation posts again.
     assertFalse(bodyText.lineSequence().any { it.trim() == "244080" })
     assertTrue(bodyText.contains(newestMessage))
-    assertTrue(bodyText.contains(olderMessage))
-
-    // MessagingStyle#getMessages() is chronological. Extraction deliberately appends those
-    // messages newest-first so an expired earlier OTP cannot win merely because it was added first.
-    assertTrue(bodyText.indexOf(newestMessage) < bodyText.lastIndexOf(olderMessage))
+    assertFalse(bodyText.contains(olderMessage))
 
     assertEquals(
         "923030",
