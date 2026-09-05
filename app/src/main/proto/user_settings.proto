@@ -24,6 +24,7 @@ message UserSettings {
   string detection_test_content = 18;
   bool is_broadcast_code_enabled = 19;
   string broadcast_target_package_name = 20;
+  int32 phrase_defaults_version = 21;
 }
 
 enum ModeOfOperation {

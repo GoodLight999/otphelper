@@ -2,6 +2,7 @@ package io.github.jd1378.otphelper.ui.screens
 
 import android.Manifest
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
@@ -37,6 +43,8 @@ import io.github.jd1378.otphelper.ui.components.SkipDialog
 import io.github.jd1378.otphelper.ui.components.TitleBar
 import io.github.jd1378.otphelper.ui.components.TodoItem
 import io.github.jd1378.otphelper.ui.components.verticalColumnScrollbar
+import io.github.jd1378.otphelper.utils.Clipboard
+import kotlinx.coroutines.launch
 
 @Composable
 fun Permissions(
@@ -49,19 +57,45 @@ fun Permissions(
   val lifecycleOwner = LocalLifecycleOwner.current
   val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var diagnosticsBusy by remember { mutableStateOf(false) }
+  var showAdvancedNotificationRecovery by rememberSaveable { mutableStateOf(false) }
   val permLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         viewModel.updatePermissionsStatus(context)
       }
+  val diagnosticsExportLauncher =
+      rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+          diagnosticsBusy = true
+          val message =
+              runCatching {
+                    val report = viewModel.buildDiagnostics(context)
+                    context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use {
+                      it.write(report)
+                    } ?: error("Unable to open diagnostic report destination")
+                    context.getString(R.string.diagnostics_exported)
+                  }
+                  .getOrElse {
+                    context.getString(
+                        R.string.diagnostics_failed,
+                        it.message ?: it.javaClass.simpleName,
+                    )
+                  }
+          diagnosticsBusy = false
+          Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+      }
 
-  val requestLabel = stringResource(R.string.request)
-  val openSettingsLabel = stringResource(R.string.open_settings)
-
-  LaunchedEffect(lifecycleState) {
+  LaunchedEffect(lifecycleState, showAdvancedNotificationRecovery) {
     when (lifecycleState) {
       Lifecycle.State.STARTED,
       Lifecycle.State.RESUMED -> {
         viewModel.updatePermissionsStatus(context)
+        if (showAdvancedNotificationRecovery) {
+          viewModel.updateAdvancedRecoveryStatus(context)
+        }
       }
       else -> {}
     }
@@ -176,15 +210,133 @@ fun Permissions(
         viewModel.onOpenBatteryOptimizationsPressed(context)
       }
 
-      if (uiState.modeOfOperation == ModeOfOperation.Notification &&
-          Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-        Text(
-            stringResource(R.string.read_notifs_android_15_desc),
-            modifier = Modifier.fillMaxWidth(),
-            fontSize = 15.sp)
+      Text(
+          stringResource(R.string.permission_resilience_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      Text(
+          stringResource(R.string.permission_honor_recents_lock_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
 
-        CodeBlock(stringResource(R.string.adb_command_sensitive_notifs))
-        CodeBlock(stringResource(R.string.adb_command_kill_app))
+      if (uiState.modeOfOperation == ModeOfOperation.Notification) {
+        Text(
+            stringResource(R.string.permission_advanced_notification_recovery_desc),
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 15.sp,
+        )
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+              showAdvancedNotificationRecovery = !showAdvancedNotificationRecovery
+            },
+        ) {
+          Text(
+              stringResource(
+                  if (showAdvancedNotificationRecovery)
+                      R.string.hide_advanced_notification_recovery
+                  else R.string.show_advanced_notification_recovery))
+        }
+
+        if (showAdvancedNotificationRecovery) {
+          Text(
+              stringResource(R.string.permission_accessibility_notification_desc),
+              modifier = Modifier.fillMaxWidth(),
+              fontSize = 15.sp,
+          )
+          TodoItem(
+              text = stringResource(R.string.permission_todo_accessibility_notifications),
+              actionText = stringResource(R.string.open_settings),
+              intermediate = !uiState.hasAccessibilityNotificationService,
+              checked = uiState.hasAccessibilityNotificationService,
+              checkboxSemantics = {
+                stateDescription =
+                    if (uiState.hasAccessibilityNotificationService) permissionGranted
+                    else permissionNotGranted
+              },
+          ) {
+            viewModel.onOpenAccessibilityPressed(context)
+          }
+
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            Text(
+                stringResource(R.string.permission_shizuku_notification_desc),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 15.sp,
+            )
+            val shizukuManager =
+                stringResource(
+                    if (uiState.shizukuManagerInstalled) R.string.permission_shizuku_installed
+                    else R.string.permission_shizuku_not_installed)
+            val shizukuBinder =
+                stringResource(
+                    if (uiState.shizukuBinderAlive) R.string.permission_shizuku_connected
+                    else R.string.permission_shizuku_not_connected)
+            Text(
+                stringResource(
+                    R.string.permission_shizuku_status,
+                    shizukuManager,
+                    shizukuBinder,
+                    uiState.shizukuPermission,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 15.sp,
+            )
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { viewModel.onRunShizukuRepair(context) },
+            ) {
+              Text(stringResource(R.string.permission_run_shizuku_repair))
+            }
+
+            Text(
+                stringResource(R.string.read_notifs_android_15_desc),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 15.sp)
+            CodeBlock(stringResource(R.string.adb_command_sensitive_notifs))
+            CodeBlock(stringResource(R.string.adb_command_kill_app))
+          }
+        }
+      }
+
+      Text(
+          stringResource(R.string.diagnostics_desc),
+          modifier = Modifier.fillMaxWidth(),
+          fontSize = 15.sp,
+      )
+      OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          enabled = !diagnosticsBusy,
+          onClick = {
+            scope.launch {
+              diagnosticsBusy = true
+              val message =
+                  runCatching {
+                        val report = viewModel.buildDiagnostics(context)
+                        Clipboard.copyToClipboard(context, report, false)
+                        context.getString(R.string.diagnostics_copied)
+                      }
+                      .getOrElse {
+                        context.getString(
+                            R.string.diagnostics_failed,
+                            it.message ?: it.javaClass.simpleName,
+                        )
+                      }
+              diagnosticsBusy = false
+              Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+          },
+      ) {
+        Text(stringResource(R.string.copy_diagnostics))
+      }
+      OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          enabled = !diagnosticsBusy,
+          onClick = { diagnosticsExportLauncher.launch("otphelper-diagnostics.txt") },
+      ) {
+        Text(stringResource(R.string.export_diagnostics))
       }
 
       if (uiState.hasAutostartSettings) {

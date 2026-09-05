@@ -10,16 +10,18 @@ import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.jd1378.otphelper.MyWorkManager.doCleanupPhrasesMigration
 import io.github.jd1378.otphelper.MyWorkManager.doDataMigration
+import io.github.jd1378.otphelper.MyWorkManager.doPhraseDefaultsMigration
 import io.github.jd1378.otphelper.MyWorkManager.enableHistoryCleanup
 import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.utils.ActivityHelper
 import io.github.jd1378.otphelper.utils.AppLogger
-import io.github.jd1378.otphelper.utils.SettingsHelper
+import io.github.jd1378.otphelper.utils.PhraseDefaultsMigrator
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 const val INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS =
     "INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS"
+const val INTENT_ACTION_SHIZUKU_REPAIR = "INTENT_ACTION_SHIZUKU_REPAIR"
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
@@ -39,9 +41,8 @@ class MainActivity : AppCompatActivity() {
     installSplashScreen()
     super.onCreate(savedInstanceState)
     AppLogger.i("MainActivity", "onCreate")
-    ActivityHelper.adjustFontSize(this, scale)
 
-    handleIntent(intent)
+    deepLinkHandler.handleDeepLink(intent)
 
     lifecycleScope.launch {
       val settings = userSettingsRepository.fetchSettings()
@@ -49,41 +50,33 @@ class MainActivity : AppCompatActivity() {
           "MainActivity",
           "settings loaded: setupFinished=${settings.isSetupFinished}, " +
               "mode=${settings.modeOfOperation}, migrationDone=${settings.isMigrationDone}, " +
-              "cleanupPhrasesMigrated=${settings.isCleanupPhrasesMigrated}",
+              "cleanupPhrasesMigrated=${settings.isCleanupPhrasesMigrated}, " +
+              "phraseDefaultsVersion=${settings.phraseDefaultsVersion}",
       )
 
-      // setup initial settings
       if (!settings.isMigrationDone) {
-        AppLogger.i("MainActivity", "starting data migration + history cleanup")
+        // The legacy-data migration seeds the current phrase defaults and marks their version in the
+        // same atomic settings write, so no phrase-default upgrade is queued for a fresh migration.
         doDataMigration(applicationContext)
         enableHistoryCleanup(applicationContext)
-      } else if (!settings.isCleanupPhrasesMigrated) {
-        AppLogger.i("MainActivity", "starting cleanup-phrases migration")
-        doCleanupPhrasesMigration(applicationContext)
+      } else {
+        if (!settings.isCleanupPhrasesMigrated) {
+          doCleanupPhrasesMigration(applicationContext)
+        }
+        if (settings.phraseDefaultsVersion < PhraseDefaultsMigrator.CURRENT_VERSION) {
+          doPhraseDefaultsMigration(applicationContext)
+        }
       }
     }
 
+    PersistenceService.start(applicationContext)
+    MyWorkManager.schedulePersistenceWatchdog(applicationContext)
     setContent { OtpHelperApp(deepLinkHandler) }
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    handleIntent(intent)
-  }
-
-  override fun onStart() {
-    super.onStart()
-    handleIntent(intent)
-    // consume the deeplink
-    intent = null
-  }
-
-  private fun handleIntent(intent: Intent?) {
-    AppLogger.d("MainActivity", "handleIntent: action=${intent?.action}, data=${intent?.data}")
-    when (intent?.action) {
-      INTENT_ACTION_OPEN_NOTIFICATION_LISTENER_SETTINGS ->
-          SettingsHelper.openNotificationListenerSettings(this)
-      else -> deepLinkHandler.handleDeepLink(intent)
-    }
+    setIntent(intent)
+    deepLinkHandler.handleDeepLink(intent)
   }
 }

@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.jd1378.otphelper.R
 import io.github.jd1378.otphelper.ui.components.DangerousActionDialog
 import io.github.jd1378.otphelper.ui.components.NewPhraseDialog
+import io.github.jd1378.otphelper.ui.components.PhraseBackupMenuItems
 import io.github.jd1378.otphelper.ui.components.TitleBar
 import io.github.jd1378.otphelper.ui.components.drawVerticalScrollbar
 import io.github.jd1378.otphelper.utils.Clipboard
@@ -63,23 +64,17 @@ fun CleanupPhrases(
 ) {
   val uriHandler = LocalUriHandler.current
   val context = LocalContext.current
-
   val phrases by viewModel.cleanupPhrases.collectAsStateWithLifecycle()
   val listState = rememberLazyListState()
   val showResetToDefaultDialog = viewModel.showResetToDefaultDialog.collectAsStateWithLifecycle()
-  val showNewCleanupPhraseDialog =
-      viewModel.showNewCleanupPhraseDialog.collectAsStateWithLifecycle()
+  val showNewCleanupPhraseDialog = viewModel.showNewCleanupPhraseDialog.collectAsStateWithLifecycle()
   val showClearListDialog = viewModel.showClearListDialog.collectAsStateWithLifecycle()
 
   Scaffold(
       modifier = modifier,
       topBar = {
-        TitleBar(
-            upPress = upPress,
-            text = stringResource(R.string.cleanup_phrases),
-        ) {
+        TitleBar(upPress = upPress, text = stringResource(R.string.cleanup_phrases)) {
           var expanded by remember { mutableStateOf(false) }
-
           Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
             IconButton(onClick = { expanded = true }) {
               Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options))
@@ -106,14 +101,22 @@ fun CleanupPhrases(
                   leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
               )
               HorizontalDivider()
+              PhraseBackupMenuItems(
+                  filePrefix = "cleanup-phrases",
+                  dismissMenu = { expanded = false },
+                  exportCurrent = viewModel::exportCurrent,
+                  importCurrent = viewModel::importCurrent,
+                  exportAll = viewModel::exportAll,
+                  importAll = viewModel::importAll,
+              )
+              HorizontalDivider()
               DropdownMenuItem(
                   text = { Text(stringResource(R.string.copy_cleanup_regex)) },
                   onClick = {
                     Clipboard.copyToClipboard(
                         context,
-                        viewModel.autoUpdatingListenerUtils.codeExtractor
-                            ?.cleanupPhrasesRegex
-                            ?.toString() ?: "",
+                        viewModel.autoUpdatingListenerUtils.codeExtractor?.cleanupPhrasesRegex?.toString()
+                            ?: "",
                         false)
                     expanded = false
                   },
@@ -128,9 +131,7 @@ fun CleanupPhrases(
         }
       },
       floatingActionButton = {
-        FloatingActionButton(
-            onClick = { viewModel.showNewCleanupPhraseDialog.value = true },
-        ) {
+        FloatingActionButton(onClick = { viewModel.showNewCleanupPhraseDialog.value = true }) {
           Icon(Icons.Filled.Add, stringResource(R.string.add))
         }
       },
@@ -144,26 +145,20 @@ fun CleanupPhrases(
         DangerousActionDialog(
             stringResource(R.string.reset_to_default),
             onDismissRequest = { viewModel.showResetToDefaultDialog.value = false },
-        ) {
-          viewModel.resetToDefault()
-        }
+        ) { viewModel.resetToDefault() }
       }
       if (showClearListDialog.value) {
         DangerousActionDialog(
             stringResource(R.string.clear_list),
             onDismissRequest = { viewModel.showClearListDialog.value = false },
-        ) {
-          viewModel.clearList()
-        }
+        ) { viewModel.clearList() }
       }
       if (showNewCleanupPhraseDialog.value) {
         NewPhraseDialog(
             title = stringResource(R.string.new_cleanup_phrase),
             validationPredicate = viewModel::isCleanupPhraseParsable,
             onDismissRequest = { viewModel.showNewCleanupPhraseDialog.value = false },
-        ) {
-          viewModel.addNewPhrase(it)
-        }
+        ) { viewModel.addNewPhrase(it) }
       }
 
       val hyperlinkText = stringResource(R.string.learn_more)
@@ -174,32 +169,28 @@ fun CleanupPhrases(
         append(stringResource(R.string.sensitive_phrases_desc_regex))
         append(" ")
         withStyle(
-            style =
-                SpanStyle(
-                    textDecoration = TextDecoration.Underline,
-                    color = MaterialTheme.colorScheme.primary)) {
-              append(hyperlinkText)
-              addStringAnnotation(
-                  tag = "URL",
-                  annotation = "https://regextutorial.org/",
-                  start = length - hyperlinkText.length,
-                  end = length)
-            }
+            SpanStyle(
+                textDecoration = TextDecoration.Underline,
+                color = MaterialTheme.colorScheme.primary)) {
+          append(hyperlinkText)
+          addStringAnnotation(
+              tag = "URL",
+              annotation = "https://regextutorial.org/",
+              start = length - hyperlinkText.length,
+              end = length)
+        }
       }
-
       ClickableText(
           text = annotatedString,
           onClick = { offset ->
             annotatedString
                 .getStringAnnotations(tag = "URL", start = offset, end = offset)
                 .firstOrNull()
-                ?.let { annotation -> uriHandler.openUriSafely(context, annotation.item) }
+                ?.let { uriHandler.openUriSafely(context, it.item) }
           },
           modifier = Modifier.fillMaxWidth(),
       )
-
       HorizontalDivider(Modifier.padding(top = dimensionResource(R.dimen.padding_page)))
-
       Box(
           modifier =
               Modifier.fillMaxSize()

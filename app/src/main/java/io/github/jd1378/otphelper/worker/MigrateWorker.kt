@@ -17,6 +17,7 @@ import io.github.jd1378.otphelper.repository.UserSettingsRepository
 import io.github.jd1378.otphelper.ui.navigation.MainDestinations
 import io.github.jd1378.otphelper.utils.AppLogger
 import io.github.jd1378.otphelper.utils.CodeExtractorDefaults
+import io.github.jd1378.otphelper.utils.PhraseDefaultsMigrator
 
 const val migrateWorkName = "migrate_work"
 
@@ -87,6 +88,7 @@ constructor(
             .clearCleanupPhrases()
             .addAllCleanupPhrases(CodeExtractorDefaults.cleanupPhrases)
             .setIsCleanupPhrasesMigrated(true)
+            .setPhraseDefaultsVersion(PhraseDefaultsMigrator.CURRENT_VERSION)
             .build())
 
     val isSetupFinished = userSettingsRepository.fetchSettings().isSetupFinished

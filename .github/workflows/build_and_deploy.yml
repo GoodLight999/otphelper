@@ -1,85 +1,160 @@
-name: build
+name: Fixed-signed fork release
 
 on:
   release:
-    types: [published]
+    types: [prereleased]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: otphelper-fork-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: cimg/android:2023.09.1
-      options: --user root
-    
+    timeout-minutes: 45
+
     steps:
-    - name: install git
-      run: |
-        sudo apt-get update;
-        sudo apt-get -y install git;
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: temurin
 
-    - name: setup JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      - name: Grant execute permission
+        run: chmod +x gradlew .github/scripts/*.sh
 
-    - name: build
-      run: | 
-        ./gradlew --no-daemon :app:bundlePlayRelease  --stacktrace
-        ./gradlew --no-daemon :app:assembleNormalRelease  --stacktrace
+      - name: Require permanent distribution signing key
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.OTPHELPER_SIGNING_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo "::error::Fork release refused: permanent signing Secrets are incomplete."
+            exit 1
+          fi
 
-    - name: Sign App Apk
-      if: ${{ github.event_name == 'release'}}
-      uses: r0adkll/sign-android-release@v1
-      with:
-        releaseDirectory: app/build/outputs/apk/normal/release
-        signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-        alias: ${{ secrets.ANDROID_ALIAS }}
-        keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      env: 
-        # found inside pulled layers detail of cimg/android inside docker hub after "/bin/bash -exo pipefail -c SDK_TOOLS_URL..."
-        BUILD_TOOLS_VERSION: "33.0.1" 
+          pinned_cert="$(tr -d ':[:space:]' < .github/signing/otphelper-cert-sha256.txt | tr '[:upper:]' '[:lower:]')"
+          if [[ ! "$pinned_cert" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Repository-pinned signing certificate is invalid."
+            exit 1
+          fi
 
-    - name: Sign App Bundle
-      if: ${{ github.event_name == 'release' }}
-      uses: r0adkll/sign-android-release@v1
-      with:
-        releaseDirectory: app/build/outputs/bundle/playRelease
-        signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-        alias: ${{ secrets.ANDROID_ALIAS }}
-        keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      env: 
-        # build tools version is found inside cimg/android related tag pulled layers details inside docker hub. after `...-c SDK_TOOLS_URL=...`
-        BUILD_TOOLS_VERSION: "33.0.1" 
-       
-    - name: Release on GitHub
-      uses: ncipollo/release-action@v1
-      with:
-        prerelease: true
-        omitBody: true
-        omitBodyDuringUpdate: true
-        omitName: true
-        allowUpdates: true
-        replacesArtifacts: true
-        updateOnlyUnreleased: true
-        artifacts: app/build/outputs/apk/normal/release/*signed.apk,app/build/outputs/bundle/playRelease/*.aab
+          key_path="$RUNNER_TEMP/otphelper-fixed-signing.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          {
+            echo "path=$key_path"
+            echo "certificate_sha256=$pinned_cert"
+          } >> "$GITHUB_OUTPUT"
 
-    - name: Push to Play Store
-      if: ${{ github.event_name == 'release' && !contains(github.ref, '-rc') }}
-      uses: r0adkll/upload-google-play@v1
-      with:
-        serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-        packageName: io.github.jd1378.otphelper
-        releaseFiles: app/build/outputs/bundle/playRelease/*.aab
-        track: internal
-        status: draft
+      - name: Verify permanent signing keystore
+        env:
+          OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+        run: .github/scripts/verify-signing-keystore.sh
+
+      - name: Build all fixed-signed APK variants
+        env:
+          OTPHELPER_KEYSTORE_PATH: ${{ steps.signing.outputs.path }}
+          OTPHELPER_KEYSTORE_PASSWORD: ${{ secrets.OTPHELPER_KEYSTORE_PASSWORD }}
+          OTPHELPER_KEY_ALIAS: ${{ secrets.OTPHELPER_KEY_ALIAS }}
+          OTPHELPER_KEY_PASSWORD: ${{ secrets.OTPHELPER_KEY_PASSWORD }}
+        run: >-
+          ./gradlew --no-daemon --no-build-cache
+          :app:clean
+          :app:assembleNormalDebug
+          :app:assemblePlayDebug
+          :app:assembleNormalRelease
+          :app:assemblePlayRelease
+          --stacktrace
+
+      - name: Verify APK contents and privacy contracts
+        run: .github/scripts/verify-distributed-apks.sh
+
+      - name: Verify every APK certificate against repository pin
+        run: .github/scripts/verify-fixed-signing.sh
+
+      - name: Generate release checksums and metadata
+        shell: bash
+        env:
+          CERTIFICATE_SHA256: ${{ steps.signing.outputs.certificate_sha256 }}
+        run: |
+          set -euo pipefail
+          release_dir="app/build/outputs/fork-release"
+          mkdir -p "$release_dir"
+          mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print | sort)
+          if (( ${#apks[@]} != 2 )); then
+            echo "Expected exactly two release APKs, found ${#apks[@]}" >&2
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            sha256sum "$apk"
+          done | sed 's#  app/build/outputs/apk/.*/#  #' > "$release_dir/SHA256SUMS.txt"
+          cat > "$release_dir/release-metadata.json" <<EOF
+          {
+            "schema": "otphelper.fork-release",
+            "version": 2,
+            "commit": "${GITHUB_SHA}",
+            "certificateSha256": "${CERTIFICATE_SHA256}",
+            "certificatePinSource": ".github/signing/otphelper-cert-sha256.txt",
+            "distribution": "GoodLight999/otphelper GitHub prerelease only"
+          }
+          EOF
+          cat "$release_dir/SHA256SUMS.txt"
+          cat "$release_dir/release-metadata.json"
+
+      - name: Upload fixed-signed release APKs for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: otphelper-fixed-signed-release-apks
+          path: |
+            app/build/outputs/apk/*/release/*.apk
+            app/build/outputs/fork-release/SHA256SUMS.txt
+            app/build/outputs/fork-release/release-metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach fixed-signed APKs to the triggering GitHub prerelease
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "Release event did not provide a tag name" >&2
+            exit 1
+          fi
+          mapfile -t assets < <(
+            find app/build/outputs/apk -type f -path '*/release/*.apk' -print | sort
+            printf '%s\n' \
+              app/build/outputs/fork-release/SHA256SUMS.txt \
+              app/build/outputs/fork-release/release-metadata.json
+          )
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Confirm fork-only distribution boundary
+        run: >-
+          echo "Google Play upload is intentionally disabled: this fork uses an independent pinned signing identity and is distributed only through this repository."

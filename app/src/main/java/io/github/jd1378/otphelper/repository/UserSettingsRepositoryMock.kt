@@ -3,11 +3,11 @@ package io.github.jd1378.otphelper.repository
 import io.github.jd1378.otphelper.ModeOfOperation
 import io.github.jd1378.otphelper.UserSettings
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 
 class UserSettingsRepositoryMock : UserSettingsRepository {
   override val userSettings: Flow<UserSettings>
-    get() = flow { UserSettings.getDefaultInstance() }
+    get() = flowOf(UserSettings.getDefaultInstance())
 
   override suspend fun fetchSettings(): UserSettings {
     TODO("Not yet implemented")
@@ -15,6 +15,11 @@ class UserSettingsRepositoryMock : UserSettingsRepository {
 
   override suspend fun saveSettings(userSettings: UserSettings) {
     TODO("Not yet implemented")
+  }
+
+  override suspend fun migratePhraseDefaultsIfNeeded() {
+    // The mock has no persistent backing store. Production migration behavior is covered by the
+    // repository implementation tests; callers only require the contract to be available here.
   }
 
   override suspend fun setIsMigrationDone(value: Boolean) {
@@ -54,6 +59,14 @@ class UserSettingsRepositoryMock : UserSettingsRepository {
   }
 
   override suspend fun setCleanupPhrases(list: List<String>) {
+    TODO("Not yet implemented")
+  }
+
+  override suspend fun setPhraseLists(
+      sensitive: List<String>,
+      ignored: List<String>,
+      cleanup: List<String>,
+  ) {
     TODO("Not yet implemented")
   }
 

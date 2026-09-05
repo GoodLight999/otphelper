@@ -6,6 +6,14 @@
     <item name="android:navigationBarColor">@android:color/transparent</item>
   </style>
 
+  <style name="Theme.OtpHelper.InternalAction" parent="Theme.OtpHelper">
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:backgroundDimEnabled">false</item>
+    <item name="android:windowDisablePreview">true</item>
+  </style>
+
   <style name="Theme.App.Starting" parent="Theme.SplashScreen">
     <!-- Set the splash screen background, animated icon, and animation
     duration. -->
