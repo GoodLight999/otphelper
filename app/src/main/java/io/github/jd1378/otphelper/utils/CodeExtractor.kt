@@ -254,12 +254,13 @@ class CodeExtractor // this comment is to separate parts
               ),
           )
 
-  // Every numeric token before a later sensitive phrase is emitted as its own match. The phrase is
-  // captured only through look-ahead, so matching an earlier number does not consume the text up to
-  // the phrase and hide a closer OTP candidate. Candidate ranking can therefore choose the number
-  // nearest the authentication phrase (e.g. `244080 923030 ... one-time password` -> `923030`).
+  // Every candidate before a later sensitive phrase is emitted as its own match. Space-separated
+  // groups are joined only when every group is at most three digits, preserving common grouped OTP
+  // formats such as `123 456` and `1 2 3 4` without merging independent values such as
+  // `244080 923030`. The phrase is captured only through look-ahead, so matching an earlier number
+  // does not consume the text up to the phrase and hide a closer OTP candidate.
   val specialCodeMatcher =
-      """(?<![\d\u0660-\u0669\u06F0-\u06F9])((?:[\d\u0660-\u0669\u06F0-\u06F9](?:-?[\d\u0660-\u0669\u06F0-\u06F9]){3,})|(?:[\d\u0660-\u0669\u06F0-\u06F9](?: [\d\u0660-\u0669\u06F0-\u06F9]){3,}))(?![\d\u0660-\u0669\u06F0-\u06F9])(?=[^:]*?(${
+      """(?<![\d\u0660-\u0669\u06F0-\u06F9])((?:[\d\u0660-\u0669\u06F0-\u06F9](?:-?[\d\u0660-\u0669\u06F0-\u06F9]){3,})|(?:[\d\u0660-\u0669\u06F0-\u06F9]{1,3}(?: [\d\u0660-\u0669\u06F0-\u06F9]{1,3})+))(?![\d\u0660-\u0669\u06F0-\u06F9])(?=[^:]*?(${
         sensitivePhrases.joinToString(
             "|",
         )
