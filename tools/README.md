@@ -29,22 +29,25 @@ Requirements:
 
 - PowerShell 7;
 - JDK 17+ with `keytool` in `PATH`;
-- authenticated GitHub CLI (`gh`) with permission to set Actions Secrets for `GoodLight999/otphelper`;
+- authenticated GitHub CLI (`gh`) with permission to set Actions Secrets and dispatch Actions workflows for `GoodLight999/otphelper`;
 - the existing permanent JKS and its existing password.
 
-Example:
+Recommended one-command operator flow:
 
 ```powershell
 pwsh ./tools/configure-otphelper-signing-secrets.ps1 `
   -KeystorePath 'C:\private\otphelper-permanent-signing.jks' `
+  -TriggerVerificationWorkflow `
   -ConfirmConfigure
 ```
 
-The helper performs the important check **before writing any Secret**: it exports the certificate from the supplied JKS and requires its SHA-256 to equal `.github/signing/otphelper-cert-sha256.txt`. A mismatched JKS is rejected. It never changes the public pin and never generates a key.
+The helper performs the important check **before writing any Secret**: it exports the certificate from the supplied JKS and requires its SHA-256 to equal `.github/signing/otphelper-cert-sha256.txt`. A mismatched JKS is rejected before any Secret write or verification-workflow trigger. It never changes the public pin and never generates a key.
 
 The password is read as a secure prompt by default. For controlled automation, `-PasswordEnvironmentVariable <NAME>` reads it from an environment variable. Secret values are sent to `gh secret set` through exact standard-input writes without adding a newline.
 
-After all four Secrets are configured, re-run Android CI. `Verify fixed signing keystore` and `Verify fixed signing certificate` must **execute successfully rather than skip**, and fixed-signed APK artifact upload must execute.
+`-TriggerVerificationWorkflow` dispatches `ci.yml` against `agent/magicos-resilience-and-backup` only after all four Secrets have been written successfully. Override those defaults with `-VerificationWorkflow <workflow>` and `-VerificationRef <ref>` if the maintained branch or workflow name changes. The helper does not create a release or publish an APK; it starts the ordinary Android CI verification run.
+
+After the dispatched run completes, `Verify fixed signing keystore`, `Verify fixed signing certificate`, and fixed-signed APK artifact upload must **execute successfully rather than skip**. Without `-TriggerVerificationWorkflow`, the helper only configures Secrets and prints the remaining CI action instead.
 
 ## `new-otphelper-signing-key.ps1`
 
