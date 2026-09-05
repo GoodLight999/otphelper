@@ -38,26 +38,29 @@
       android:label="@string/app_name"
       android:supportsRtl="true"
       tools:targetApi="31">
+    <!--
+      MainActivity is app-private. All app-owned deep links and notification PendingIntents target it
+      explicitly, so no external VIEW/custom-scheme surface is required. The only exported Activity
+      entry point is the launcher alias immediately below.
+    -->
     <activity
         android:name=".MainActivity"
-        android:exported="true"
+        android:exported="false"
         android:launchMode="singleTask"
-        android:theme="@style/Theme.App.Starting">
+        android:theme="@style/Theme.App.Starting" />
+
+    <activity-alias
+        android:name=".LauncherActivity"
+        android:enabled="true"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:targetActivity=".MainActivity">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="otphelper" />
-        <data android:host="history_detail" />
-        <data android:host="permissions" />
-        <data android:host="home" />
-        <data android:host="settings" />
-      </intent-filter>
-    </activity>
+    </activity-alias>
 
     <activity
         android:name=".InternalActionActivity"
