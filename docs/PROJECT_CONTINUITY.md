@@ -57,17 +57,21 @@ Use `tools/configure-otphelper-signing-secrets.ps1` with an existing backup of t
 - never generates a key;
 - exports the JKS certificate first;
 - requires its SHA-256 to equal the repository pin before writing any Secret;
-- writes exactly the four private Secret values through `gh secret set` standard input without appending a newline.
+- writes exactly the four private Secret values through `gh secret set` standard input without appending a newline;
+- can optionally dispatch ordinary Android CI after successful Secret setup, without creating a release.
 
-Example shape only; do not put secret values in chat or source control:
+Recommended operator command shape only; do not put secret values in chat or source control:
 
 ```powershell
 pwsh ./tools/configure-otphelper-signing-secrets.ps1 `
   -KeystorePath '<private-path-to-existing-jks>' `
+  -TriggerVerificationWorkflow `
   -ConfirmConfigure
 ```
 
-After configuration, re-run Android CI and require `Verify fixed signing keystore`, `Verify fixed signing certificate`, and fixed-signed APK artifact upload to execute successfully rather than skip.
+The default verification dispatch is `ci.yml` on `agent/magicos-resilience-and-backup`. Override with `-VerificationWorkflow` / `-VerificationRef` if those names change. A mismatched JKS must be rejected before any Secret write **or workflow dispatch**; this rejection and the exact four-Secret plus CI-trigger success path are covered by the signing contract test.
+
+After configuration, require the dispatched Android CI run to show `Verify fixed signing keystore`, `Verify fixed signing certificate`, and fixed-signed APK artifact upload executing successfully rather than skipping.
 
 ### Private-key recovery across ChatGPT threads
 
@@ -168,7 +172,7 @@ For a **releasable fixed-signed** state, also require a current-head Android CI 
 
 The GitHub connector available to ChatGPT cannot write GitHub Actions Secrets. Therefore the four permanent signing Secrets must be configured from an authenticated operator environment before fixed-signed distributable artifacts can be produced by GitHub Actions.
 
-Use `tools/configure-otphelper-signing-secrets.ps1`; do not use the bootstrap generator to create another key. Once Secrets are installed, future threads should verify their presence indirectly by running CI/release workflows and confirming that fixed-signing verification executes successfully. GitHub Secrets are intentionally unreadable after creation.
+Use `tools/configure-otphelper-signing-secrets.ps1`; do not use the bootstrap generator to create another key. Prefer its `-TriggerVerificationWorkflow` option so Secret setup and the required fixed-signing verification run are initiated from one operator command. GitHub Secrets are intentionally unreadable after creation; future threads verify presence indirectly from CI behavior.
 
 ## Physical-device migration
 
