@@ -89,18 +89,79 @@ if build_type == "debug" and not is_debuggable:
 if build_type == "release" and is_debuggable:
     raise SystemExit("Release APK must not be debuggable")
 
+main_name = "io.github.jd1378.otphelper.MainActivity"
 main = next(
     (
         activity
         for activity in application.findall("activity")
-        if activity.get(android + "name") == "io.github.jd1378.otphelper.MainActivity"
+        if activity.get(android + "name") == main_name
     ),
     None,
 )
 if main is None:
     raise SystemExit("MainActivity is missing from merged APK Manifest")
+if main.get(android + "exported") != "false":
+    raise SystemExit("MainActivity must remain private (exported=false)")
+if main.findall("intent-filter"):
+    raise SystemExit("Private MainActivity must not expose Intent filters")
 if main.get(android + "excludeFromRecents") == "true":
     raise SystemExit("MainActivity is excluded from Recents")
+
+launcher_aliases = [
+    alias
+    for alias in application.findall("activity-alias")
+    if alias.get(android + "targetActivity") == main_name
+]
+if len(launcher_aliases) != 1:
+    raise SystemExit(
+        "Exactly one launcher alias must target MainActivity; "
+        f"found {len(launcher_aliases)}"
+    )
+launcher = launcher_aliases[0]
+if launcher.get(android + "exported") != "true":
+    raise SystemExit("MainActivity launcher alias must be exported")
+
+launcher_filters = launcher.findall("intent-filter")
+if len(launcher_filters) != 1:
+    raise SystemExit("Launcher alias must expose exactly one MAIN/LAUNCHER intent filter")
+launcher_filter = launcher_filters[0]
+actions = {
+    node.get(android + "name") for node in launcher_filter.findall("action")
+}
+categories = {
+    node.get(android + "name") for node in launcher_filter.findall("category")
+}
+if actions != {"android.intent.action.MAIN"}:
+    raise SystemExit(f"Launcher alias exposes unexpected actions: {sorted(actions)}")
+if categories != {"android.intent.category.LAUNCHER"}:
+    raise SystemExit(f"Launcher alias exposes unexpected categories: {sorted(categories)}")
+if launcher_filter.findall("data"):
+    raise SystemExit("Launcher alias must not expose URI/data matching")
+
+# App-internal deep links use explicit intents/PendingIntents. No Activity may reintroduce the old
+# externally browsable otphelper:// surface through a VIEW/BROWSABLE filter.
+for component in list(application.findall("activity")) + list(application.findall("activity-alias")):
+    for intent_filter in component.findall("intent-filter"):
+        component_actions = {
+            node.get(android + "name") for node in intent_filter.findall("action")
+        }
+        component_categories = {
+            node.get(android + "name") for node in intent_filter.findall("category")
+        }
+        schemes = {
+            node.get(android + "scheme")
+            for node in intent_filter.findall("data")
+            if node.get(android + "scheme")
+        }
+        if "otphelper" in schemes:
+            raise SystemExit("External otphelper:// Activity surface must not be shipped")
+        if (
+            "android.intent.action.VIEW" in component_actions
+            and "android.intent.category.BROWSABLE" in component_categories
+        ):
+            raise SystemExit(
+                "Unexpected externally browsable Activity filter in distributed APK"
+            )
 
 internal_action = next(
     (
