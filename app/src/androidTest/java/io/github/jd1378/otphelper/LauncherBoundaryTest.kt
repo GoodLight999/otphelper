@@ -43,7 +43,7 @@ class LauncherBoundaryTest {
     val resolved =
         packageManager.queryIntentActivities(
             launcherIntent,
-            PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()),
+            PackageManager.ResolveInfoFlags.of(0),
         )
 
     assertEquals(
